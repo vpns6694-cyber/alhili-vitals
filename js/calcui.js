@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.3 — Medication calculator UI. Copyright (c) 2026 Abdalla Abbadi. All rights reserved.
+/*! Al Hili Vitals 3.4 — Medication calculator UI. Copyright (c) 2026 Abdalla Abbadi. All rights reserved.
     For reference only. Verify with a pharmacist and local protocol. */
 (function(){'use strict';const A=window.AHV,C=window.AHVCalc;const $=A.$,$$=A.$$,esc=A.esc;
 const MODES=[

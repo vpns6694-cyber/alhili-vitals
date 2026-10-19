@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.3 — parsers for voice dictation, monitor-screen OCR and wristband barcodes. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
+/*! Al Hili Vitals 3.4 — parsers for voice dictation, monitor-screen OCR and wristband barcodes. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
 (function(root,f){const m=f();if(typeof module==='object'&&module.exports)module.exports=m;else root.AHVParse=m;})(this,function(){
 'use strict';
 const W2N={zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
@@ -131,6 +131,56 @@ function parseVoice(text){const T=tokenize(text);const o={},src={};let cur=null,
 /** range check for the confirm sheet: returns {key:message} for values outside plausible ranges */
 function voiceIssues(o){const e={};for(const k in RANGE){if(o[k]==null)continue;const [lo,hi]=RANGE[k];if(isNaN(o[k])||o[k]<lo||o[k]>hi)e[k]=`Outside ${lo}–${hi}`;}
  if(o.sys!=null&&o.dia!=null&&o.sys<=o.dia)e.dia='Must be lower than systolic';return e;}
+/* ---------- 3.4 names-sheet parser: OCR lines → [{name,mrn,age,bed}] ---------- */
+const HDR={name:/^(names?|patient|patients|patient name|full name|الاسم|اسم|المريض)$/i,mrn:/^(mrn|mr|id|file|file no|emr|رقم الملف|الملف|رقم)$/i,age:/^(age|yrs|years|العمر|عمر)$/i,bed:/^(bed|room|bay|السرير|سرير|غرفة)$/i,no:/^(no\.?|#|s\.?no|sr|serial|م|رقم)$/i};
+const isAr=s=>/[\u0600-\u06FF]/.test(s);
+function cleanTok(t){return String(t||'').replace(/[\u200e\u200f\u202a-\u202e]/g,'').replace(/[|_~`^*“”"«»\[\]{}<>+=]/g,'').replace(/^[•·●○◦▪■□►\-–—>:;.,]+|[•·●○◦▪■□►\-–—:;,]+$/g,'').trim();}
+const NOISE=/^(قائمة.*|list|patients?\s*list|ward|date|shift|nurse|clinic|page|sheet|total|al hili.*|seha.*)$/i;
+function headerOrder(toks){const t=toks.map(x=>cleanTok(x).toLowerCase()).filter(Boolean);const out=[];let hits=0;
+ for(let i=0;i<t.length;i++){const two=t[i]+' '+(t[i+1]||'');let k=null;
+  for(const key of ['name','mrn','age','bed','no']){if(HDR[key].test(two)){k=key;i++;break;}if(HDR[key].test(t[i])){k=key;break;}}
+  if(k){hits++;if(!out.includes(k))out.push(k);}}
+ return hits>=2?out:null;}
+function titleName(s){if(isAr(s))return s.replace(/\s+/g,' ').trim();
+ return s.toLowerCase().replace(/(^|[\s'-])(\p{L})/gu,(m,a,b)=>a+b.toUpperCase()).replace(/\b(Al|Bin|Bint|Abu|El)\b(?=\s)/g,w=>w).replace(/\s+/g,' ').trim();}
+/** rows: array of strings or token arrays (left→right). Returns {items:[{name,mrn,age,bed,raw}],header} */
+function parseNameRows(rows){let header=null;const items=[];
+ for(const r of rows){const rs=(Array.isArray(r)?r.join(' '):String(r)).replace(/^\s*[(#]?[\dIlSO]{1,3}[.)\-:,]\s+/,'');let toks=rs.split(/\s+/).map(cleanTok).filter(Boolean);if(!toks.length)continue;const raw=toks.join(' ');
+  const h=headerOrder(toks);if(h&&!toks.some(t=>/\d{4,}/.test(t))){header=h;continue;}
+  if(toks.some(t=>/^(قائمة|المرضى)$/.test(t))||/^(patients?|clinic|ward)\b/i.test(raw)&&!/\d{4,}/.test(raw)&&toks.length<=4&&/clinic|ward|list/i.test(raw)||NOISE.test(raw)||/^(ward|date|shift|nurse|page|total|signature|printed)\b/i.test(raw))continue;
+  // strip leading numbering: "1." "1)" "01" "#3" "(4)" "١-"
+  toks[0]=toks[0].replace(/^[(#]?\d{1,3}[.)\-:,]+/,'');if(!toks[0])toks.shift();if(!toks.length)continue;
+  if(toks.length&&/^\(?\d{1,3}[.)]?$/.test(toks[0])&&toks.length>1&&(header?header[0]==='no':true)&&!(header&&header[0]==='bed'))toks.shift();
+  const o={raw};const nameW=[];const nums=[];
+  for(let ti=0;ti<toks.length;ti++){const t=toks[ti],tl=t.toLowerCase();const last=ti===toks.length-1;
+   let m;
+   if((m=t.match(/^(?:mrn|mr|id)[:#-]?([a-z]{0,3}-?\d{3,})$/i))){o.mrn=m[1].toUpperCase();continue;}
+   if(/^(mrn|mr|id|age|bed|yrs?|years?|y\/o|y|room)[:.]?$/i.test(t)){o._next=tl.replace(/[:.]$/,'');continue;}
+   if(/^[a-z]{0,3}-?\d{5,}$/i.test(t)){o.mrn=t.toUpperCase();continue;}
+   if((m=t.match(/^(?:bed|room)[-:]?(\d{1,3}[a-z]?)$/i))){o.bed=m[1].toUpperCase();continue;}
+   // ward bed codes: A3, C28, B13 — OCR often reads 1 as l/I, 5 as S, 0 as O, 8 as B in the digit part
+   if(/^[a-z][0-9]{1,3}$/i.test(t)&&nameW.length||last&&(header?header.includes('bed'):o.mrn!=null)&&(o.mrn!=null||o.age!=null||nums.length)&&/^[a-z][0-9lIiSsOoB]{1,3}$/i.test(t)){
+    const L0=t[0];const dg=t.slice(1).replace(/[lIi]/g,'1').replace(/[Ss]/g,'5').replace(/[Oo]/g,'0').replace(/B/g,'8');if(/^\d{1,3}$/.test(dg)){o.bed=(L0+dg).toUpperCase();continue;}}
+   if(/^\d{1,3}[a-z]$/i.test(t)&&!/^\d{1,3}y$/i.test(t)){o.bed=t.toUpperCase();continue;}
+   if((m=t.match(/^(\d{1,3})(?:y|yrs?|years?)$/i))){o.age=+m[1];continue;}
+   if(/^\d{1,4}$/.test(t)){if(o._next==='bed'||o._next==='room')o.bed=t;else if(/^(age|yrs?|years?|y)$/.test(o._next||''))o.age=+t;else if(o._next==='mrn'||o._next==='mr'||o._next==='id')o.mrn=t;else nums.push(t);o._next=null;continue;}
+   if(/^\d+$/.test(t)&&t.length>=4){o.mrn=t;continue;}
+   if(/^[\p{L}][\p{L}'.\-]*$/u.test(t)&&!/\d/.test(t)){if(nameW.length<6)nameW.push(t.replace(/\.$/,''));continue;}}
+  // assign remaining small numbers by header order, else heuristic: ≤120 → age, then bed
+  const order=(header||['name','mrn','age','bed']).filter(k=>k==='age'||k==='bed'||k==='mrn').filter(k=>o[k]==null);
+  for(const n of nums){const k=order.shift();if(k==='mrn'&&n.length<4){const k2=order.shift();if(k2)o[k2]=k2==='age'?+n:n;continue;}if(k)o[k]=k==='age'?+n:n;}
+  delete o._next;
+  if(o.age!=null&&(o.age>120)){o.bed=o.bed||String(o.age);delete o.age;}
+  if(nameW.some(isAr)){for(let i=nameW.length-1;i>=0;i--)if(!isAr(nameW[i])&&nameW[i].length<=3)nameW.splice(i,1);}
+  const nm=nameW.join(' ');if(nm.replace(/[^\p{L}]/gu,'').length<2)continue;
+  if(nameW.length===1&&/^(name|patient|mrn|age|bed|no)$/i.test(nm))continue;
+  o.name=titleName(nm);items.push(o);}
+ return{items,header};}
+const normName=s=>String(s||'').toLowerCase().replace(/[^\p{L}]/gu,'').replace(/^(al|el)/,'');
+/** mark items that duplicate each other or existing patients (same MRN, or same normalised name) */
+function dedupeNames(items,existing){const seen=new Map();(existing||[]).forEach(p=>{if(p.mrn)seen.set('m:'+String(p.mrn).toUpperCase(),'existing');if(p.name)seen.set('n:'+normName(p.name),'existing');});
+ return items.map(it=>{const km=it.mrn?'m:'+String(it.mrn).toUpperCase():null,kn='n:'+normName(it.name);const d=(km&&seen.get(km))||seen.get(kn)||null;
+  const r={...it,dup:d};if(km)seen.set(km,seen.get(km)||'list');seen.set(kn,seen.get(kn)||'list');return r;});}
 /** monitor OCR text → {sys,dia,pr,spo2,temp,rr} by label proximity, then by plausible ranges/position */
 function parseMonitor(text){const t=String(text||'').replace(/[Oo](?=\d)|(?<=\d)[Oo]/g,'0').replace(/[|]/g,' ');const o={},used=new Set();
  const lines=t.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);const all=lines.join('\n');
@@ -164,4 +214,4 @@ function parseMonitorBoxes(words,text){const W=(words||[]).map(w=>({t:String(w.t
    const dx=n.b.x0-lb.b.x0,dy=n.b.y0-lb.b.y1;if(dy<-((lb.b.y1-lb.b.y0)*0.8)||dx<-(lb.b.x1-lb.b.x0))continue;const d=Math.hypot(dx,dy*1.2);if(d<bd){bd=d;best=[n,v];}}
   if(best){o[k]=best[1];used.add(best[0]);}}
  const t=parseMonitor(text||W.map(w=>w.t).join('\n'));for(const k in t)if(o[k]==null&&!Object.values(o).includes(t[k]))o[k]=t[k];return o;}
-return{parseMonitorBoxes,parseVoice,voiceIssues,tokenize,parseMonitor,parseBand,words2num,VOICE_RANGE:RANGE};});
+return{parseNameRows,dedupeNames,headerOrder,parseMonitorBoxes,parseVoice,voiceIssues,tokenize,parseMonitor,parseBand,words2num,VOICE_RANGE:RANGE};});

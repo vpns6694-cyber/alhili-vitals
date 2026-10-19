@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.3 — on-device OCR engine (works in the PWA, the iOS app AND the single-file HTML, fully offline).
+/*! Al Hili Vitals 3.4 — on-device OCR engine (works in the PWA, the iOS app AND the single-file HTML, fully offline).
     Image pipeline: upscale → grayscale → adaptive (Sauvola-style) threshold → table quad detection + perspective
     correction (or projection-profile deskew) → ruling-line grid detection → line removal → Tesseract words → grid cells.
     Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae */
@@ -10,7 +10,13 @@ const u8=b=>{const s=atob(b),a=new Uint8Array(s.length);for(let i=0;i<s.length;i
 const blobURL=(bytes,type)=>URL.createObjectURL(new Blob([bytes],{type}));
 let worker=null,workerP=null,idle=null,progCb=null;
 function loadScript(src){return new Promise((res,rej)=>{if(window.Tesseract)return res();const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('Could not load the OCR engine ('+src+')'));document.head.appendChild(s);});}
-async function engine(){clearTimeout(idle);if(worker)return worker;if(workerP)return workerP;
+const extra={};// 3.4: extra language workers, e.g. 'eng+ara' (Arabic data is an optional ~1.4 MB download, cached offline by the service worker)
+async function engine(lang){if(lang&&lang!=='eng'){if(window.__SINGLE__)throw new Error('Arabic OCR needs the installed app (Home Screen). This single-file version reads English only.');
+  if(!extra[lang]){extra[lang]=(async()=>{await loadScript('vendor/tesseract/tesseract.min.js');const base=new URL('vendor/tesseract/',location.href).href;
+   return Tesseract.createWorker(lang.split('+'),1,{workerPath:base+'worker.min.js',corePath:base+'core',langPath:base+'lang',gzip:false,cacheMethod:'none',workerBlobURL:false,logger:m=>{if(m.status==='recognizing text'&&progCb)progCb(m.progress);}});})();
+   extra[lang].catch(()=>{delete extra[lang];});}
+  return extra[lang];}
+ clearTimeout(idle);if(worker)return worker;if(workerP)return workerP;
  workerP=(async()=>{const single=!!window.__SINGLE__;let opts,langs='eng';
   const logger=m=>{if(m.status==='recognizing text'&&progCb)progCb(m.progress);};
   if(single){const w=B64('tworker'),c=B64('tcore'),l=B64('teng');if(!window.Tesseract||!w||!c||!l)throw new Error('OCR engine is missing from this file.');
@@ -129,5 +135,39 @@ async function readTable(f,onProg,opts={}){progCb=p=>onProg&&onProg(p*0.75);cons
   else{res.rows=wordsToRows(words);res.extra=[];}
   return res;}finally{progCb=null;release();}}
 /** simple OCR (monitor screens etc.) with custom params on an already-prepared canvas */
+/** bright paper on a darker background → its 4 corners (Otsu mask + extreme points), or null when the page fills the frame */
+function pageQuad(g,w,h){const s=Math.max(1,Math.round(Math.max(w,h)/500)),sw=Math.floor(w/s),sh=Math.floor(h/s);const hist=new Uint32Array(256);const m=new Uint8Array(sw*sh);
+ for(let y=0;y<sh;y++)for(let x=0;x<sw;x++)hist[g[(y*s)*w+x*s]|0]++;let tot=sw*sh,sum=0;for(let i=0;i<256;i++)sum+=i*hist[i];let sB=0,wB=0,best=0,th=128;
+ for(let i=0;i<256;i++){wB+=hist[i];if(!wB)continue;const wF=tot-wB;if(!wF)break;sB+=i*hist[i];const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>best){best=v;th=i;}}
+ let n=0;for(let y=0;y<sh;y++)for(let x=0;x<sw;x++)if(g[(y*s)*w+x*s]>th){m[y*sw+x]=1;n++;}const fr=n/tot;if(fr<0.2||fr>0.93)return null;
+ // keep only rows/cols that are mostly paper (ignores text holes) — corners from extreme sums
+ let tl=null,tr=null,br=null,bl=null,a=1e9,b=-1e9,c=-1e9,d=1e9;
+ for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){if(!m[y*sw+x])continue;let k=0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const yy=y+dy,xx=x+dx;if(yy>=0&&xx>=0&&yy<sh&&xx<sw&&m[yy*sw+xx])k++;}if(k<20)continue;
+  const p1=x+y,p2=x-y;if(p1<a){a=p1;tl=[x,y];}if(p1>b){b=p1;br=[x,y];}if(p2>c){c=p2;tr=[x,y];}if(p2<d){d=p2;bl=[x,y];}}
+ if(!tl)return null;const Q=[tl,tr,br,bl].map(([x,y])=>[x*s,y*s]);const area=Math.abs((Q[0][0]*Q[1][1]-Q[1][0]*Q[0][1])+(Q[1][0]*Q[2][1]-Q[2][0]*Q[1][1])+(Q[2][0]*Q[3][1]-Q[3][0]*Q[2][1])+(Q[3][0]*Q[0][1]-Q[0][0]*Q[3][1]))/2;
+ if(area<w*h*0.25)return null;const near=Q.every(([x,y])=>(x<w*.03||x>w*.97)&&(y<h*.03||y>h*.97));if(near)return null;
+ const cx=(Q[0][0]+Q[1][0]+Q[2][0]+Q[3][0])/4,cy=(Q[0][1]+Q[1][1]+Q[2][1]+Q[3][1])/4;return Q.map(([x,y])=>[x+(cx-x)*0.015,y+(cy-y)*0.015]);}
+/** 3.4 names sheet preprocessing: upscale → grayscale → shadow/background flattening (divide by local mean) → deskew. No line removal (it eats handwriting). */
+async function prepNames(f,{target=2600}={}){const img=await loadImage(f);const long=Math.max(img.width,img.height);const sc=Math.min(3,target/long);let w=Math.round(img.width*sc),h=Math.round(img.height*sc);
+ const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.drawImage(img,0,0,w,h);
+ let g=toGray(x.getImageData(0,0,w,h).data,w,h);let rect=false;const q=pageQuad(g,w,h);if(q){const W0=warp(g,w,h,q,{l:0,r:0,t:0,b:0});g=W0.g;w=W0.w;h=W0.h;rect=true;}
+ const I=integral(g,w,h),r=Math.max(12,Math.round(Math.min(w,h)/30));const o=new Uint8ClampedArray(w*h);
+ for(let y=0;y<h;y++){const y0=Math.max(0,y-r),y1=Math.min(h,y+r+1);for(let xx=0;xx<w;xx++){const x0=Math.max(0,xx-r),x1=Math.min(w,xx+r+1);const m=(I[y1*(w+1)+x1]-I[y0*(w+1)+x1]-I[y1*(w+1)+x0]+I[y0*(w+1)+x0])/((y1-y0)*(x1-x0));
+  const v=g[y*w+xx]/Math.max(30,m)*255;o[y*w+xx]=m<70?255:v>235?255:Math.max(0,(v-60)*1.25);}}
+ let G={g:o,w,h};const b=binarize(G.g,w,h);const a=skewAngle(b,w,h);let ang=0;if(Math.abs(a)>=0.4&&Math.abs(a)<15){G=rotate(G.g,w,h,a);ang=a;}
+ return{canvas:grayCanvas(G.g,G.w,G.h),rectified:rect,angle:ang};}
+/** 3.4 names sheet: photo → text lines (token arrays, left→right) with mean confidence per line */
+async function readNames(f,onProg,{lang='eng'}={}){progCb=p=>onProg&&onProg(0.1+p*0.85);onProg&&onProg(0.03);const pp=await prepNames(f);const wk=await engine(lang);
+ // Arabic: Tesseract's default layout analysis works; forcing a page-seg mode drops the RTL words (measured)
+ try{if(lang.includes('ara'))await wk.setParameters({user_defined_dpi:'300'});else await wk.setParameters({tessedit_pageseg_mode:'4',preserve_interword_spaces:'1',user_defined_dpi:'300',tessedit_char_whitelist:''});
+  const {data}=await wk.recognize(pp.canvas);
+  const ws=(data.words||[]).filter(w=>String(w.text||'').trim()&&(w.confidence>15||/[\p{L}\d]{2,}/u.test(w.text))).map(w=>({t:w.text.trim(),conf:w.confidence,cx:(w.bbox.x0+w.bbox.x1)/2,cy:(w.bbox.y0+w.bbox.y1)/2,h:w.bbox.y1-w.bbox.y0})).sort((a,b)=>a.cy-b.cy);
+  const L=[];for(const w of ws){const l=L.find(x=>Math.abs(x.cy-w.cy)<Math.max(w.h,10)*0.6);if(l){l.w.push(w);l.cy=(l.cy*(l.w.length-1)+w.cy)/l.w.length;}else L.push({cy:w.cy,w:[w]});}
+  const rtl=lang.includes('ara');
+  const lines=L.sort((a,b)=>a.cy-b.cy).map(l=>{const arr=l.w.sort((a,b)=>a.cx-b.cx);const ar=arr.filter(x=>/[\u0600-\u06FF]/.test(x.t));
+   // Arabic words come out left→right visually; restore reading order for the name part
+   if(rtl&&ar.length>1){const lat=arr.filter(x=>!/[\u0600-\u06FF]/.test(x.t));return{t:[...ar.reverse().map(x=>x.t),...lat.map(x=>x.t)],conf:arr.reduce((a,x)=>a+x.conf,0)/arr.length};}
+   return{t:arr.map(x=>x.t),conf:arr.reduce((a,x)=>a+x.conf,0)/arr.length};});
+  return{lines,text:data.text,nwords:(data.words||[]).length,preview:pp.canvas,rectified:pp.rectified,angle:pp.angle};}finally{progCb=null;if(lang==='eng')release();}}
 async function recognizeCanvas(canvas,params,onProg){progCb=onProg;const wk=await engine();try{await wk.setParameters(params||{});const {data}=await wk.recognize(canvas);return data;}finally{progCb=null;release();}}
-return{engine,readTable,recognizeCanvas,preprocess,toGray,binarize,lineMasks,findQuad,homography,warp,rotate,skewAngle,gridLines,wordsToGrid,wordsToRows};});
+return{engine,readTable,readNames,pageQuad,recognizeCanvas,preprocess,toGray,binarize,lineMasks,findQuad,homography,warp,rotate,skewAngle,gridLines,wordsToGrid,wordsToRows};});

@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.3 — reminders: local notifications + chime. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
+/*! Al Hili Vitals 3.4 — reminders: local notifications + chime. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
 (function(){'use strict';const A=window.AHV,SH=window.AHVShift;const $=A.$,$$=A.$$,esc=A.esc;
 let list=null,last=null,timer=null;A.remLog=[];
 const load=async()=>list||(list=(await A.DB.kget('reminders'))||[]);

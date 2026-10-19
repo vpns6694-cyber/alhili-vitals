@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.3 — Nurse Profile: duty roster, on-device import (OCR / PDF / Excel / CSV / text), shift codes.
+/*! Al Hili Vitals 3.4 — Nurse Profile: duty roster, on-device import (OCR / PDF / Excel / CSV / text), shift codes.
     Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae */
 (function(){'use strict';const A=window.AHV,SH=window.AHVShift;const $=A.$,$$=A.$$,esc=A.esc;
 A.loadExtras=async()=>{A.S.codes=(await A.DB.kget('codes'))||SH.DEFAULT_CODES.map(c=>({...c}));const r=await A.DB.kget('roster');A.S.roster=(r&&r.days)||{};A.S.rosterMeta=r||{};

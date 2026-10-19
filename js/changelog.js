@@ -1,0 +1,29 @@
+/*! Al Hili Vitals 3.4 — What's New / changelog + service-worker update prompt. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
+(function(){'use strict';const A=window.AHV;const $=A.$,$$=A.$$,esc=A.esc;
+const LOG=[
+ {v:'3.4.0',d:'19 Oct 2026',t:'Shift batch & names sheet',i:['Photograph a paper patient list: names, MRN, age and bed are read on the device, then reviewed (edit, delete, add, merge) before creating patients','Arabic names on the sheet (optional 1.4 MB download, then offline)','Shift Batch screen with status lights: grey not started, amber partial, green complete','Widgets for Total, Completed and Remaining. Tap Remaining to jump to the next incomplete patient','The form lists exactly what is missing, with a “Next incomplete” button for fast flow','Progress ring, counters, check animation and haptics (respects Reduce Motion)','What’s New screen and a “Reload to update” prompt','Glass tab bar and widgets, refined iOS sheets and safe areas']},
+ {v:'3.3.0',d:'19 Oct 2026',t:'Voice entry overhaul & encryption',i:['New voice parser: any order, number words, Arabic numerals and words, common mishearings, corrections (“no, pulse 90”)','Live transcript, field-by-field highlight, tap / hold / dictation modes, auto-stop on silence, retry per field, optional read-back','Range-checked confirm sheet','Glucose and Pain fields','Patient data and roster encrypted on the device (AES-GCM, key from your passcode)','Escalating passcode lockout that survives reloads; Erase also clears the roster','OCR engine pre-cached so photo reading works fully offline']},
+ {v:'3.2.0',d:'18 Oct 2026',t:'Roster photo OCR, icons & setup guide',i:['Roster photos are read inside the single-file version too, offline','Review table for every imported roster (photo, PDF, Excel, CSV, text)','Clinic logo without background, glass app icon for browser and Home Screen','First-run guide: install steps, notifications and permissions','Published as an installable offline web app on GitHub Pages']},
+ {v:'3.1.0',d:'18 Oct 2026',t:'Design rebuild',i:['Every screen rebuilt on one design system: spacing, type, buttons','Unified headers with logo, readable text and AA contrast','Tidier patient cards and calculator tabs']},
+ {v:'3.0.0',d:'Oct 2026',t:'Orbital redesign',i:['Orbital neumorphic design in DM Sans','Intro with the UAE flag and logo, animated login','Nurse profile with duty roster import and day cards','Home with current shift and countdown','Reminders (notification and voice), medication calculator','Voice, monitor-photo and wristband entry; critical-value alerts','Copy-for-system helper (no auto-typing) and end-of-shift summary (PDF, Excel, CSV)']},
+ {v:'2.0.0',d:'2026',t:'Fast entry & nurse profile',i:['Unlimited patients with the + button and fast iPhone entry','Entry time recorded and exported','Nurse profile: name, photo, ID, signature on exports','Animated background and liquid-glass login']},
+ {v:'1.0.0',d:'2026',t:'First release',i:['Vital-signs form based on the clinic sheet','Local-only storage on the device','PDF / CSV export']}];
+A.CHANGELOG=LOG;
+const block=e=>`<div class="wn"><div class="wnh"><span class="wnv">${esc(e.v)}</span><b>${esc(e.t)}</b><span class="wnd">${esc(e.d)}</span></div><ul>${e.i.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
+A.openWhatsNew=function(latestOnly){A.sheet(latestOnly?'What’s New':'Updates',`${latestOnly?`<div class="wnhero"><img src="${A.LOGO}" alt=""><div><b>Al Hili Vitals ${esc(A.VERSION)}</b><span>You’re up to date</span></div></div>`:
+ `<div class="group"><div class="cell"><div class="grow">Installed version<div class="s">Al Hili Vitals ${esc(A.VERSION)}</div></div></div><button class="cell" id="wn-chk"><div class="grow" style="color:var(--navy)">Check for updates</div></button></div><div class="small" id="wn-st" style="margin:8px 4px 0"></div><div class="sec">Version history</div>`}
+ <div id="wn-list">${(latestOnly?LOG.slice(0,1):LOG).map(block).join('')}</div>${latestOnly?'<button class="btn block" id="wn-all" style="margin-top:12px">See all versions</button>':''}<div class="stamp">${esc(A.COPY)}</div>`);
+ const all=$('#wn-all');if(all)all.onclick=()=>A.openWhatsNew(false);
+ const chk=$('#wn-chk');if(chk)chk.onclick=async()=>{const st=$('#wn-st');if(!navigator.onLine){st.textContent='You are offline — updates are checked when you are online.';return;}
+  try{const r=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration();if(!r){st.textContent='Updates come with the app file itself in this version.';return;}st.textContent='Checking…';await r.update();
+   setTimeout(()=>{st.textContent=r.waiting||r.installing?'Update found — tap “Reload to update”.':'You have the latest version.';},1500);}catch(e){st.textContent='Could not check: '+e.message;}};};
+/** shown once after an update (not on first install) */
+A.whatsNewOnce=function(){const k='ahv_seen_version',seen=localStorage.getItem(k);localStorage.setItem(k,A.VERSION);if(seen&&seen!==A.VERSION)setTimeout(()=>A.openWhatsNew(true),400);};
+/** service worker update flow: new version waits until the user taps Reload */
+A.swUpdates=function(reg){if(!reg)return;let shown=false;const show=w=>{if(shown||!navigator.serviceWorker.controller)return;shown=true;
+  const b=document.createElement('div');b.className='updbar glassw';b.id='upd-bar';b.innerHTML=`<span>A new version is ready</span><button class="btn p" id="upd-go">Reload to update</button><button class="txtbtn" id="upd-x" aria-label="Later">Later</button>`;document.body.appendChild(b);
+  $('#upd-go').onclick=()=>{w.postMessage('skip');};$('#upd-x').onclick=()=>b.remove();};
+ if(reg.waiting)show(reg.waiting);
+ reg.addEventListener('updatefound',()=>{const w=reg.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed')show(w);});});
+ let rl=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(rl)return;rl=true;location.reload();});};
+})();

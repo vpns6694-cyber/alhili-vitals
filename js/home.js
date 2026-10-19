@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.3 — Home dashboard with current shift + countdown ring. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
+/*! Al Hili Vitals 3.4 — Home dashboard with current shift + countdown ring. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
 (function(){'use strict';const A=window.AHV;const SH=window.AHVShift;
 const fmtHM=d=>A.pad2(d.getHours())+':'+A.pad2(d.getMinutes());
 const fmtDur=ms=>{ms=Math.max(0,ms);const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return(h?A.pad2(h)+':':'')+A.pad2(m)+':'+A.pad2(x);};

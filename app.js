@@ -1,8 +1,8 @@
-/*! Al Hili Vitals 3.3 — Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae
+/*! Al Hili Vitals 3.4 — Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae
     Local-only: all data in IndexedDB on this device. No network calls, no analytics. */
 (function(){
 'use strict';
-const VERSION='3.3.0';
+const VERSION='3.4.0';
 const COPY='Copyright (c) 2026 Abdalla Abbadi. All rights reserved.';
 const EMAIL='a.abbadi@edcad.ae';
 const AS=n=>(window.__ASSETS__&&window.__ASSETS__[n])||n;
@@ -72,7 +72,7 @@ function toast(m){const el=$('#toast');el.textContent=m;el.classList.add('on');c
 function haptic(kind='light'){try{const H=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.Haptics;
  if(H){kind==='error'?H.notification({type:'ERROR'}):kind==='success'?H.notification({type:'SUCCESS'}):H.impact({style:kind==='medium'?'MEDIUM':'LIGHT'});return;}
  const l=$('#hap');if(l)l.click(); if(navigator.vibrate)navigator.vibrate(kind==='error'?[30,40,30]:kind==='success'?20:8);}catch(e){}}
-const I={search:'<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M11 11l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+const I={cam:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',search:'<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M11 11l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
  gear:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>',
  lock:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>',
  plus:'<svg width="28" height="28" viewBox="0 0 28 28"><path d="M14 5v18M5 14h18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
@@ -213,8 +213,8 @@ const TABS=[['home','Home','<path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v
 const R={};
 function pageHead(title,right=''){return `<header class="nav" id="nav"><div class="topbar"><img class="logo-sm" src="${LOGO}" alt="Al Hili Clinic"><div class="navr">${right}</div></div><h1 class="large">${title}</h1>`;}
 function view(){let v=$('#view');if(!v){$('#app').innerHTML=`<div id="view"></div><nav class="tabbar" id="tabbar">${TABS.map(([k,l,p])=>`<button data-tab="${k}" aria-label="${l}"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg><span>${l}</span></button>`).join('')}</nav>`;
- $$('#tabbar [data-tab]').forEach(b=>b.onclick=()=>{haptic();go(b.dataset.tab);});v=$('#view');}return v;}
-function go(tab,opts){S.tab=tab;view();$$('#tabbar [data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));window.onscroll=null;if(S.tick){clearInterval(S.tick);S.tick=null;}
+ $$('#tabbar [data-tab]').forEach(b=>b.onclick=()=>{haptic();b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop');go(b.dataset.tab);});v=$('#view');}return v;}
+function go(tab,opts){S.tab=tab;view();$$('#tabbar [data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===(tab==='batch'?'patients':tab)));window.onscroll=null;if(S.tick){clearInterval(S.tick);S.tick=null;}
  (tab==='patients'?renderPatients:tab==='settings'?renderSettings:R[tab]||renderPatients)(opts);if(!opts||!opts.keepScroll)scrollTo(0,0);}
 /* ---------------- patients ---------------- */
 function chips(p){const b=bmi(p),c=[],f=cls(p);const ch=(k,lab,val,fl)=>`<span class="chip ${fl}">${fl==='crit'?'⚠︎ ':''}<b>${lab}</b>${val}</span>`;
@@ -229,24 +229,27 @@ function chips(p){const b=bmi(p),c=[],f=cls(p);const ch=(k,lab,val,fl)=>`<span c
  return c.join('');}
 function card(p){return `<button class="pcard ${critical(p)?'iscrit':''}" data-id="${p.id}"><div class="num">${seqOf(p)}</div><div class="grow"><div class="pname ${p.name?'':'ph'}">${esc(p.name||'Unnamed patient')}</div><div class="ptop">${p.mrn?`<span class="mrn">${esc(p.mrn)}</span>`:''}<span class="ptime">${esc(fStamp(p.ts))}</span></div>${chips(p)?`<div class="chips">${chips(p)}</div>`:''}</div></button>`;}
 function greet(){const h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening';}
-function renderHome(){if(S.tab==='patients')renderPatients();}
+function renderHome(){if(S.tab==='patients')renderPatients();else if(S.tab==='batch')R.batch({keepScroll:true});}
 function renderPatients(){const pr=S.profile||{};const list=visible();const q=S.q.trim();
  const groups={};list.forEach(p=>(groups[dayKey(p.ts)]=groups[dayKey(p.ts)]||[]).push(p));
  const keys=Object.keys(groups).sort().reverse();
  const last=list.length?fTime(list[list.length-1].ts):'—';
  const body=!list.length?`<div class="empty"><b>${q?'No matches':'No patients yet'}</b>${q?'Try a different name.':'Tap <b style="display:inline;color:var(--navy)">+</b> to add a patient — the form opens ready for typing.'}</div>`
   :keys.map(k=>`<div class="sechead"><span>${k===todayKey()?'Today · ':''}${esc(fDay(k))}</span><span>${groups[k].length}</span></div>${groups[k].slice().reverse().map(card).join('')}`).join('');
- view().innerHTML=`${pageHead('Patients',`<button class="iconbtn" id="h-lock" aria-label="Lock">${I.lock}</button><button class="iconbtn" id="h-set" aria-label="Settings">${I.gear}</button>`)}
+ const bp=window.AHV.Batch&&window.AHV.Batch.progressText();
+ view().innerHTML=`${pageHead('Patients',`<button class="iconbtn" id="h-batch" aria-label="Shift batch and names sheet">${I.cam}</button><button class="iconbtn" id="h-lock" aria-label="Lock">${I.lock}</button><button class="iconbtn" id="h-set" aria-label="Settings">${I.gear}</button>`)}
   <label class="search">${I.search}<input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Search all patients" value="${esc(S.q)}"></label>
   <div class="daybar"><div class="seg"><button data-v="today" class="${S.view==='today'?'on':''}">Today</button><button data-v="day" class="${S.view==='day'?'on':''}">Day</button><button data-v="all" class="${S.view==='all'?'on':''}">All</button></div>
   <label class="datechip">${I.cal}<span>${S.view==='day'?new Date(S.day+'T12:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'Pick'}</span><input type="date" id="dpick" value="${S.day}" max="${todayKey()}"></label></div></header>
  <main><div class="stats"><div class="stat hero"><div class="n">${list.length}</div><div class="l">${q?'Matches':S.view==='all'?'All patients':'Patients'}</div></div><div class="stat"><div class="n" style="color:${list.filter(abnormal).length?'var(--warn)':'inherit'}">${list.filter(abnormal).length}</div><div class="l">Abnormal</div></div><div class="stat"><div class="n" style="color:${list.filter(critical).length?'var(--crit)':'inherit'}">${list.filter(critical).length}</div><div class="l">Critical</div></div></div><div class="meta">Last entry ${last}</div>
  <div class="actions"><button class="act" id="x-pdf">${I.pdf}PDF</button><button class="act" id="x-csv">${I.csv}CSV</button><button class="act" id="x-xlsx">${I.csv}Excel</button><button class="act" id="x-print">${I.print}Print</button><button class="act" id="x-share">${I.share}Share</button></div>
+ <button class="bbanner glassw" id="p-batch"><span class="light ${bp&&bp.split('/')[0]===bp.split('/')[1]?'green':bp?'amber':'grey'}"></span><div class="grow"><b>Shift batch</b><span>${bp?bp+' complete · tap to continue':'Scan a paper names list to start'}</span></div>${I.chev}</button>
  ${body}<div class="stamp">Al Hili Vitals ${VERSION} · Stored on this device only<br>${COPY}</div></main>
  <button class="fab" id="fab" aria-label="Add patient">${I.plus}</button>`;
  const nav=$('#nav');const onS=()=>nav.classList.toggle('scrolled',scrollY>4);onS();window.onscroll=onS;
  $('#q').oninput=e=>{S.q=e.target.value;const pos=e.target.selectionStart;renderPatients();const n=$('#q');n.focus();try{n.setSelectionRange(pos,pos)}catch(_){}};
  $$('[data-v]').forEach(b=>b.onclick=()=>{S.view=b.dataset.v;haptic();renderPatients();});
+ $('#h-batch').onclick=()=>{haptic();go('batch');};$('#p-batch').onclick=()=>{haptic();go('batch');};
  $('#dpick').onchange=e=>{if(e.target.value){S.day=e.target.value;S.view=S.day===todayKey()?'today':'day';renderPatients();}};
  $$('.pcard').forEach(b=>b.onclick=()=>openEntry(S.patients.find(p=>p.id===b.dataset.id),false));
  $('#fab').onclick=()=>{haptic('medium');newPatient();};
@@ -279,7 +282,7 @@ function criticalModal(list){return new Promise(res=>{haptic('error');const m=mo
  <div class="mbody"><p>These readings are in the critical range. Re-check, then escalate per protocol.</p><div class="critlist">${list.map(c=>`<div><b>${esc(c.label)}</b><span>${esc(c.value)} ${esc(c.unit)}</span></div>`).join('')}</div></div>
  <div class="mfoot"><button class="btn" id="cm-edit">Re-check</button><button class="btn danger" id="cm-ok">Confirm & save</button></div>`,'critm');
  $('#cm-edit',m).onclick=()=>{m.remove();res(false);};$('#cm-ok',m).onclick=()=>{m.remove();res(true);};});}
-function openEntry(p,isNew){const root=$('#sheet-root');const v=x=>x==null?'':x;const seq=seqOf(p);
+function openEntry(p,isNew,opt={}){const root=$('#sheet-root');const B=window.AHV.Batch;const inB=!!(p.batch&&B);S.editing=p.id;$$('.bcard').forEach(c=>c.classList.toggle('editing',c.dataset.id===p.id));let warned=false;const wasDone=inB&&B.status(p)==='green';const v=x=>x==null?'':x;const seq=seqOf(p);
  const F=(k,label,unit,im,ph,extra='')=>`<div><div class="lbl"><span>${label}</span><span class="st" id="st-${k}"></span></div><div class="big" data-k="${k}"><input id="f-${k}" inputmode="${im}" ${im==='numeric'?'pattern="[0-9]*"':''} enterkeyhint="next" placeholder="${ph}" value="${v(p[k])}" ${extra}><span class="u">${unit}</span></div></div>`;
  root.innerHTML=`<div class="scrim"><div class="sheet" id="sheet"><div class="shead"><div class="grab"></div><div class="topbar"><button class="txtbtn" id="e-x">Cancel</button><div class="ttl">${isNew?'New Patient':'Patient'} #${seq}</div><button class="txtbtn r" id="e-done">Save</button></div><div class="sub">Entered ${esc(fStamp(p.ts))}</div></div>
  <div class="sbody" id="sbody">
@@ -287,7 +290,7 @@ function openEntry(p,isNew){const root=$('#sheet-root');const v=x=>x==null?'':x;
    <label class="tool"><input type="file" accept="image/*" capture="environment" id="t-mon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M6 12h3l2-4 2 7 2-3h3M9 21h6"/></svg>Monitor</label>
    <button type="button" class="tool" id="t-band"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>Wristband</button>
    <button type="button" class="tool" id="t-copy" ${isNew?'disabled':''}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg>Copy</button></div>
-  <div class="critbar hidden" id="critbar"></div>
+  <div class="critbar hidden" id="critbar"></div><div class="missbar hidden" id="missbar" role="alert"></div>${inB&&p.bed?`<div class="bedtag">Bed ${esc(p.bed)}</div>`:''}
   <div class="lbl">Name</div><div class="big name" data-k="name"><input id="f-name" autocomplete="off" autocorrect="off" autocapitalize="words" enterkeyhint="next" placeholder="Patient name" value="${esc(p.name)}" maxlength="80"></div>
   <div class="sugg" id="sugg"></div>
   <div class="grid2"><div><div class="lbl">MRN / ID</div><div class="big name" data-k="mrn"><input id="f-mrn" autocomplete="off" autocapitalize="characters" enterkeyhint="next" placeholder="MRN" value="${esc(p.mrn||'')}" maxlength="30"></div></div>
@@ -302,7 +305,7 @@ function openEntry(p,isNew){const root=$('#sheet-root');const v=x=>x==null?'':x;
   ${isNew?'':'<button class="btn d block" id="e-del">Delete Patient</button>'}
   <div class="stamp">Nurse: ${esc(S.profile?.name||'')} · ${esc(S.profile?.staffId||'')} · RR/SpO₂ pre-filled — edit if different</div>
  </div>
- <div class="sfoot"><button class="btn" id="e-save">Save</button><button class="btn p" id="e-next">Save & Add Next</button></div></div></div>`;
+ <div class="sfoot">${inB?'<button class="btn" id="e-save">Save</button><button class="btn p" id="e-nextinc">Next incomplete ›</button>':'<button class="btn" id="e-save">Save</button><button class="btn p" id="e-next">Save & Add Next</button>'}</div></div></div>`;
  const sheet=$('#sheet');
  const vv=window.visualViewport;const fitVV=()=>{if(!vv)return;sheet.style.height=Math.min(innerHeight-10,vv.height-8)+'px';sheet.parentElement.style.alignItems='flex-start';sheet.parentElement.style.paddingTop=(vv.offsetTop+8)+'px';};
  if(vv&&vv.height<innerHeight-80)fitVV();const onVV=()=>{if(vv.height<innerHeight-80)fitVV();else{sheet.style.height='';sheet.parentElement.style.alignItems='';sheet.parentElement.style.paddingTop='';}};vv&&vv.addEventListener('resize',onVV);
@@ -318,7 +321,13 @@ function openEntry(p,isNew){const root=$('#sheet-root');const v=x=>x==null?'':x;
   Object.entries(lv).forEach(([k,l])=>{const el=$('#st-'+k);if(el){el.textContent=LBL[l][0];el.style.color=LBL[l][1];}});
   const cb=$('#critbar');const cr=f.critical.filter(c=>!e[c.k]);cb.classList.toggle('hidden',!cr.length);cb.innerHTML=cr.length?`<b>⚠︎ Critical:</b> ${cr.map(c=>esc(c.label+' '+c.value+' '+c.unit)).join(' · ')}`:'';
   const msgs=Object.entries(e).filter(([k])=>all||k!=='name'&&!(k==='dia'&&q.dia==null)).map(x=>x[1]);$('#e-h').textContent=msgs[0]||'';
-  const b=(!e.ht&&!e.wt)?bmi(q):null;$('#bmi-v').textContent=b?f1(b):'—';$('#bmi-v').style.color=b?LBL[flagBMI(b)==='bad'?'crit':flagBMI(b)][1]:'';$('#bmi-l').textContent=b?bmiLabel(b):'';return{q,e,f};};
+  const b=(!e.ht&&!e.wt)?bmi(q):null;$('#bmi-v').textContent=b?f1(b):'—';$('#bmi-v').style.color=b?LBL[flagBMI(b)==='bad'?'crit':flagBMI(b)][1]:'';$('#bmi-l').textContent=b?bmiLabel(b):'';
+  if(inB){const st=B.status({...p,...q,updated:p.updated||(isBlank(q)?0:1)});const c=document.querySelector(`.bcard[data-id="${p.id}"] .light`);if(c)c.className='light '+st;
+   const mb=$('#missbar');if(mb&&!mb.classList.contains('hidden'))showMiss(B.missing(q),true);}
+  return{q,e,f};};
+ const showMiss=(ms,quiet)=>{const mb=$('#missbar');$$('.big.miss',root).forEach(x=>x.classList.remove('miss'));if(!ms.length){mb.classList.add('hidden');mb.innerHTML='';return;}
+  ms.forEach(m=>{const el=root.querySelector(`[data-k="${m.k}"]`);if(el)el.classList.add('miss');});
+  mb.classList.remove('hidden');mb.innerHTML=`<b>Missing ${ms.length}:</b> ${ms.map(m=>esc(m.label)).join(', ')}${quiet?'':'<div class="small">Tap Save again to keep it partial, or fill them now.</div>'}`;};
  const autoRR=()=>{if(!rrAuto)return;$('#f-rr').value=RG.defaultRR(read());};
  $('#f-infant').onchange=e=>{$('#f-age').disabled=e.target.checked;if(e.target.checked)$('#f-age').value='';autoRR();update(false);haptic();};
  $('#f-rr').addEventListener('input',()=>{rrAuto=false;});
@@ -335,13 +344,17 @@ function openEntry(p,isNew){const root=$('#sheet-root');const v=x=>x==null?'':x;
   el.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();if(id==='f-spo2')save(true);else next(id);}});});
  $('#f-mrn').addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();$('#f-age').disabled?$('#f-ht').focus():$('#f-age').focus();}});
  const fill=o=>{Object.entries(o).forEach(([k,val])=>{if(k==='infant'){$('#f-infant').checked=!!val;$('#f-age').disabled=!!val;return;}const el=$('#'+FIELD_IDS[k]);if(el&&val!=null&&val!=='')el.value=val;});if(o.rr!=null)rrAuto=false;else autoRR();sug();update(false);haptic('success');};
- const close=()=>{vv&&vv.removeEventListener('resize',onVV);root.innerHTML='';};
+ const close=()=>{vv&&vv.removeEventListener('resize',onVV);root.innerHTML='';S.editing=null;$$('.bcard.editing').forEach(c=>c.classList.remove('editing'));};
  const save=async(andNext)=>{const{q,e,f}=update(true);if(Object.keys(e).length){haptic('error');sheet.classList.remove('shake');void sheet.offsetWidth;sheet.classList.add('shake');$('#'+FIELD_IDS[Object.keys(e)[0]]).focus();return;}
+  if(inB&&!warned&&andNext!=='inc'){const ms=B.missing(q);if(ms.length){warned=true;showMiss(ms);haptic('error');const first=root.querySelector('.big.miss input');first&&first.focus();return;}}
   if(f.critical.length&&!(await criticalModal(f.critical)))return;
-  Object.assign(p,q,{rrAuto,updated:Date.now(),critical:f.critical.map(c=>c.k)});DB.put(p);haptic('success');
+  Object.assign(p,q,{rrAuto,updated:Date.now(),critical:f.critical.map(c=>c.k)});DB.put(p).catch(e=>toast('Could not save: '+e.message));haptic('success');
+  if(inB&&!wasDone&&B.status(p)==='green'){S.justDone=p.id;}
+  if(andNext==='inc'){close();renderHome();B.jumpNext(p.id);return;}
   if(andNext){close();newPatient();$('#f-name').focus();renderHome();toast('Saved #'+seq+' · next patient');}else{close();renderHome();toast('Saved');}};
- $('#e-save').onclick=()=>save(false);$('#e-done').onclick=()=>save(false);$('#e-next').onclick=()=>save(true);
- const cancel=async()=>{if(isNew&&isBlank(p)&&isBlank(read())){S.patients=S.patients.filter(x=>x!==p);await DB.del(p.id);}close();renderHome();};
+ $('#e-save').onclick=()=>save(false);$('#e-done').onclick=()=>save(false);if($('#e-next'))$('#e-next').onclick=()=>save(true);if($('#e-nextinc'))$('#e-nextinc').onclick=()=>save('inc');
+ const cancel=async()=>{if(inB&&!warned){const q=read();const dirty=['sys','dia','temp','pr','age','gluc','pain','wt','ht','mrn'].some(k=>String(q[k]??'')!==String(p[k]??''));const ms=B.missing(q);if(dirty&&ms.length){warned=true;showMiss(ms);$('#missbar').insertAdjacentHTML('beforeend','<div class="small">Unsaved changes. Tap Cancel again to discard, or Save.</div>');haptic('error');return;}}
+  if(isNew&&isBlank(p)&&isBlank(read())){S.patients=S.patients.filter(x=>x!==p);await DB.del(p.id);}close();renderHome();};
  $('#e-x').onclick=cancel;root.querySelector('.scrim').addEventListener('click',ev=>{if(ev.target.classList.contains('scrim'))cancel();});
  const d=$('#e-del');if(d)d.onclick=async()=>{if(!confirm('Delete this patient record?'))return;S.patients=S.patients.filter(x=>x!==p);await DB.del(p.id);haptic('medium');close();renderHome();toast('Deleted');};
  // fast-entry tools (voice / monitor OCR / wristband) live in js/capture.js
@@ -349,7 +362,8 @@ function openEntry(p,isNew){const root=$('#sheet-root');const v=x=>x==null?'':x;
  $('#t-mon').onchange=e=>{const fl=e.target.files[0];e.target.value='';if(fl)window.AHV.monitorEntry(fl,fill);};
  $('#t-band').onclick=()=>window.AHV.bandScan(fill);
  $('#t-copy').onclick=()=>window.AHV.copyForSystem(p);
- update(false);if(isNew)$('#f-name').focus();}
+ update(false);if(isNew)$('#f-name').focus();
+ if(inB&&opt.highlight){const ms=B.missing(read());if(ms.length){showMiss(ms,true);const first=root.querySelector('.big.miss input');if(first)setTimeout(()=>first.focus(),60);}}}
 /* ---------------- settings ---------------- */
 function renderSettings(){window.onscroll=null;const pr=S.profile||{};
  view().innerHTML=`${pageHead('Settings')}</header>
@@ -365,6 +379,8 @@ function renderSettings(){window.onscroll=null;const pr=S.profile||{};
   <button class="cell" id="s-copy"><span class="ico nv">⧉</span><div class="grow">Copy-for-system order<div class="s">Field order for manual entry</div></div>${I.chev}</button>
   <button class="cell" id="s-sum"><span class="ico tq">Σ</span><div class="grow">End-of-shift summary<div class="s">PDF · Excel · CSV</div></div>${I.chev}</button>
   <div class="cell disabled" aria-disabled="true"><span class="ico gr">⇄</span><div class="grow">Shift Swap <span class="soon">Coming soon</span><div class="s">Request and approve shift swaps with colleagues, right from your roster.</div></div></div></div>
+ <div class="sec">Shift batch</div><div class="group"><button class="cell" id="s-req"><span class="ico tq">✓</span><div class="grow">Required fields<div class="s">${['Name','MRN','Age','BP','Pulse','Temp','RR','SpO₂'].concat((S.reqExtras||[]).map(k=>({gluc:'Glucose',pain:'Pain',wt:'Weight',ht:'Height'})[k])).join(', ')}</div></div>${I.chev}</button></div>
+ <div class="sec">Updates</div><div class="group"><button class="cell" id="s-new"><span class="ico tq">★</span><div class="grow">What’s New & Updates<div class="s">Version ${VERSION} · changelog</div></div>${I.chev}</button></div>
  <div class="sec">Security</div><div class="group"><button class="cell" id="s-pin"><div class="grow" style="color:var(--navy)">Change Passcode</div>${I.chev}</button>
   <label class="cell"><div class="grow">Auto-lock after 1 minute away</div><input type="checkbox" class="switch" id="s-auto" ${localStorage.getItem('ahv_autolock')!=='0'?'checked':''}></label>
   <button class="cell" id="s-lock"><div class="grow" style="color:var(--navy)">Lock Now</div></button></div>
@@ -379,6 +395,10 @@ function renderSettings(){window.onscroll=null;const pr=S.profile||{};
  window.AHV.remSummary&&window.AHV.remSummary().then(t=>{const e=$('#s-rem-s');if(e)e.textContent=t;});
  $('#s-prof').onclick=()=>{const root=$('#sheet-root');root.innerHTML=`<div class="scrim"><div class="sheet"><div class="shead"><div class="grab"></div><div class="topbar"><button class="txtbtn" id="pp-x">Cancel</button><div class="ttl">Edit Profile</div><span style="width:64px"></span></div></div><div class="sbody" id="pp"></div></div></div>`;
   $('#pp-x').onclick=()=>root.innerHTML='';profileForm($('#pp'),S.profile,{submitLabel:'Save Profile',onDone:()=>{root.innerHTML='';renderSettings();toast('Profile saved');}});};
+ $('#s-new').onclick=()=>window.AHV.openWhatsNew(false);
+ $('#s-req').onclick=()=>{const X=[['gluc','Glucose'],['pain','Pain'],['wt','Weight'],['ht','Height']];const cur=new Set(S.reqExtras||[]);
+  window.AHV.sheet('Required fields',`<p class="small">Always required: Name, MRN, Age, BP, Pulse, Temp, RR, SpO₂. Add extras:</p><div class="group">${X.map(([k,l])=>`<label class="cell"><div class="grow">${l}</div><input type="checkbox" class="rq" data-k="${k}" ${cur.has(k)?'checked':''}></label>`).join('')}</div>`);
+  $$('.rq').forEach(c=>c.onchange=async()=>{S.reqExtras=$$('.rq').filter(x=>x.checked).map(x=>x.dataset.k);await DB.kset('reqExtras',S.reqExtras);haptic();});};
  $('#s-pin').onclick=async()=>{if(await Lock.unlock(true)){if(await Lock.setPin(true))toast('Passcode changed');}};
  $('#s-auto').onchange=e=>localStorage.setItem('ahv_autolock',e.target.checked?'1':'0');
  $('#s-lock').onclick=lockNow;
@@ -476,13 +496,13 @@ async function deliver(files,share){if(navigator.canShare&&navigator.canShare({f
  return{pages,pdf,csv,xlsx,deliver,print};})();
 /* ---------------- boot ---------------- */
 async function boot(){
-if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!window.__SINGLE__&&!window.Capacitor)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!window.__SINGLE__&&!window.Capacitor)navigator.serviceWorker.register('sw.js').then(r=>window.AHV.swUpdates&&window.AHV.swUpdates(r)).catch(()=>{});
  document.body.insertAdjacentHTML('beforeend','<label id="hap" style="position:fixed;left:-99px;top:0;opacity:0;pointer-events:none"><input type="checkbox" switch></label>');
  const sp=(window.AHV.intro?window.AHV.intro():splash());S.profile=await DB.kget('profile');await sp;
  if(!S.profile||!Lock.has()){await setupScreen();}else{await Lock.unlock(false);}
  await load();window.AHV.loadExtras&&await window.AHV.loadExtras();
  if(window.AHV.onboard&&!window.AHV.onboardSeen())await window.AHV.onboard();
- go('home');window.AHV.startReminders&&window.AHV.startReminders();
+ go('home');window.AHV.whatsNewOnce&&window.AHV.whatsNewOnce();window.AHV.startReminders&&window.AHV.startReminders();
  let hid=0;document.addEventListener('visibilitychange',async()=>{if(document.hidden)hid=Date.now();
   else if(localStorage.getItem('ahv_autolock')!=='0'&&Lock.has()&&Date.now()-hid>60000&&!Lock.isOpen()){await Lock.unlock(false);}});
 }

@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.3 — fast capture (voice, monitor OCR, wristband scan), Copy-for-system helper, end-of-shift summary,
+/*! Al Hili Vitals 3.4 — fast capture (voice, monitor OCR, wristband scan), Copy-for-system helper, end-of-shift summary,
     ranges & copy-order settings. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae */
 (function(){'use strict';const A=window.AHV,P=window.AHVParse,RG=window.AHVRanges,SH=window.AHVShift;const $=A.$,$$=A.$$,esc=A.esc;
 const LBL={name:'Name',mrn:'MRN / ID',age:'Age',infant:'Baby/infant',ht:'Height',wt:'Weight',sys:'Systolic',dia:'Diastolic',temp:'Temp',pr:'Pulse',rr:'Resp. rate',spo2:'SpO₂',gluc:'Glucose',pain:'Pain'};
