@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.2 — on-device OCR engine (works in the PWA, the iOS app AND the single-file HTML, fully offline).
+/*! Al Hili Vitals 3.3 — on-device OCR engine (works in the PWA, the iOS app AND the single-file HTML, fully offline).
     Image pipeline: upscale → grayscale → adaptive (Sauvola-style) threshold → table quad detection + perspective
     correction (or projection-profile deskew) → ruling-line grid detection → line removal → Tesseract words → grid cells.
     Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae */

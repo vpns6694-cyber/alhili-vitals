@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.2 — age-aware vital-sign ranges (normal / borderline / critical). Copyright (c) 2026 Abdalla Abbadi. All rights reserved.
+/*! Al Hili Vitals 3.3 — age-aware vital-sign ranges (normal / borderline / critical). Copyright (c) 2026 Abdalla Abbadi. All rights reserved.
     Defaults are general reference values; each clinic should review them in Settings. */
 (function(root,f){const m=f();if(typeof module==='object'&&module.exports)module.exports=m;else root.AHVRanges=m;})(this,function(){
 'use strict';

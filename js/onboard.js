@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.2 — first-run setup guide: platform detection, install steps, permissions with live status, checklist.
+/*! Al Hili Vitals 3.3 — first-run setup guide: platform detection, install steps, permissions with live status, checklist.
     Re-open any time from Settings › Setup guide. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae */
 (function(){'use strict';const A=window.AHV;const $=A.$,$$=A.$$,esc=A.esc;
 const KEY='ahv_onboard';

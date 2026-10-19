@@ -1,8 +1,8 @@
-/*! Al Hili Vitals 3.2 — Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae
+/*! Al Hili Vitals 3.3 — Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae
     Local-only: all data in IndexedDB on this device. No network calls, no analytics. */
 (function(){
 'use strict';
-const VERSION='3.2.0';
+const VERSION='3.3.0';
 const COPY='Copyright (c) 2026 Abdalla Abbadi. All rights reserved.';
 const EMAIL='a.abbadi@edcad.ae';
 const AS=n=>(window.__ASSETS__&&window.__ASSETS__[n])||n;
@@ -15,13 +15,26 @@ const DB=(()=>{let dbp=null,fb=false;
  const run=(st,mode,fn)=>open().then(d=>new Promise((res,rej)=>{const x=d.transaction(st,mode);const req=fn(x.objectStore(st));x.oncomplete=()=>res(req&&req.result);x.onerror=()=>rej(x.error);}));
  const L={get:k=>JSON.parse(localStorage.getItem('fb_'+k)||'null'),set:(k,v)=>localStorage.setItem('fb_'+k,JSON.stringify(v))};
  const g=(p,f)=>fb?Promise.resolve(f()):p().catch(()=>{fb=true;return f();});
+ // 3.3: AES-GCM at rest. Key is derived from the passcode (PBKDF2-SHA256, 310k) at unlock and only kept in memory.
+ let KEY=null;const ENCK=new Set(['roster','rosterTeam']);const te=new TextEncoder(),td=new TextDecoder();
+ const b64=u=>{let s='';const a=new Uint8Array(u);for(let i=0;i<a.length;i+=0x8000)s+=String.fromCharCode.apply(null,a.subarray(i,i+0x8000));return btoa(s);};
+ const ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+ const enc=async v=>{if(!KEY)return v;const iv=crypto.getRandomValues(new Uint8Array(12));return{_e:1,iv:b64(iv),ct:b64(await crypto.subtle.encrypt({name:'AES-GCM',iv},KEY,te.encode(JSON.stringify(v))))};};
+ const dec=async v=>{if(!v||v._e!==1)return v;if(!KEY)throw new Error('locked');return JSON.parse(td.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:ub64(v.iv)},KEY,ub64(v.ct))));};
+ const encP=async p=>KEY?{id:p.id,...(await enc(p))}:p;
+ const allRaw=()=>g(()=>run('patients','readonly',s=>s.getAll()),()=>L.get('patients')||[]);
  return{
-  all:()=>g(()=>run('patients','readonly',s=>s.getAll()),()=>L.get('patients')||[]),
-  put:p=>g(()=>run('patients','readwrite',s=>{s.put(p)}),()=>{const a=(L.get('patients')||[]).filter(x=>x.id!==p.id);a.push(p);L.set('patients',a);}),
+  setKey:k=>{KEY=k;},hasKey:()=>!!KEY,
+  async all(){const raw=await allRaw();const out=[];for(const r of raw){try{out.push(await dec(r));}catch(e){}}return out;},
+  async migrate(){if(!KEY)return 0;let n=0;const raw=await allRaw();for(const r of raw){if(r&&r._e!==1){await this.put(r);n++;}}for(const k of ENCK){const v=await this.kgetRaw(k);if(v!=null&&v._e!==1){await this.kset(k,v);n++;}}return n;},
+  async rekey(k){const ps=await this.all();const kv={};for(const x of ENCK)kv[x]=await this.kget(x);KEY=k;for(const p of ps)await this.put(p);for(const x of ENCK)if(kv[x]!=null)await this.kset(x,kv[x]);},
+  put:async p=>{const v=await encP(p);return g(()=>run('patients','readwrite',s=>{s.put(v)}),()=>{const a=(L.get('patients')||[]).filter(x=>x.id!==p.id);a.push(v);L.set('patients',a);});},
   del:id=>g(()=>run('patients','readwrite',s=>{s.delete(id)}),()=>L.set('patients',(L.get('patients')||[]).filter(x=>x.id!==id))),
   clear:()=>g(()=>run('patients','readwrite',s=>{s.clear()}),()=>L.set('patients',[])),
-  kget:k=>g(()=>run('kv','readonly',s=>s.get(k)),()=>L.get('kv_'+k)),
-  kset:(k,v)=>g(()=>run('kv','readwrite',s=>{s.put(v,k)}),()=>L.set('kv_'+k,v)),
+  kgetRaw:k=>g(()=>run('kv','readonly',s=>s.get(k)),()=>L.get('kv_'+k)),
+  kget:async function(k){const v=await this.kgetRaw(k);try{return await dec(v);}catch(e){return null;}},
+  kset:async(k,v)=>{const w=ENCK.has(k)?await enc(v):v;return g(()=>run('kv','readwrite',s=>{s.put(w,k)}),()=>L.set('kv_'+k,w));},
+  kdel:k=>g(()=>run('kv','readwrite',s=>{s.delete(k)}),()=>localStorage.removeItem('fb_kv_'+k)),
   get mode(){return fb?'localStorage (fallback)':'IndexedDB'}};})();
 /* ---------------- clinical rules (age-aware ranges, editable) ---------------- */
 const RG=window.AHVRanges;
@@ -40,7 +53,7 @@ const critical=p=>cls(p).critical.length>0;
 function validate(p){const e={};if(!p.name||!p.name.trim())e.name='Enter the patient name';
  const r=(k,lo,hi,m)=>{if(p[k]!=null&&(isNaN(p[k])||p[k]<lo||p[k]>hi))e[k]=m;};
  r('age',0,120,'Age must be 0–120 years');r('ht',30,250,'Height must be 30–250 cm');r('wt',0.3,350,'Weight must be 0.3–350 kg');r('sys',40,300,'Systolic must be 40–300');r('dia',20,200,'Diastolic must be 20–200');
- r('temp',30,45,'Temperature must be 30–45 °C');r('pr',20,300,'Pulse must be 20–300 bpm');r('rr',2,100,'Resp. rate must be 2–100 /min');r('spo2',40,100,'SpO₂ must be 40–100 %');
+ r('temp',30,45,'Temperature must be 30–45 °C');r('pr',20,300,'Pulse must be 20–300 bpm');r('rr',2,100,'Resp. rate must be 2–100 /min');r('spo2',40,100,'SpO₂ must be 40–100 %');r('gluc',0.5,45,'Glucose must be 0.5–45 mmol/L');r('pain',0,10,'Pain score must be 0–10');
  if(!e.sys&&!e.dia){if((p.sys==null)!==(p.dia==null))e.dia='Enter both systolic and diastolic';else if(p.sys!=null&&p.sys<=p.dia)e.dia='Systolic must be higher than diastolic';}
  return e;}
 /* ---------------- helpers ---------------- */
@@ -96,6 +109,10 @@ const Lock=(()=>{
  async function hash(pin,salt){if(!(window.crypto&&crypto.subtle)){let h=7;const s=hex(salt)+pin;for(let i=0;i<s.length;i++)h=(h*131+s.charCodeAt(i))>>>0;return'w'+h;}
   const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(pin),'PBKDF2',false,['deriveBits']);
   return hex(await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:150000,hash:'SHA-256'},k,256));}
+ async function deriveKey(pin,c){if(!(window.crypto&&crypto.subtle))return null;if(!c.esalt){c.esalt=hex(crypto.getRandomValues(new Uint8Array(16)));save(c);}
+  const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(pin),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt:unhex(c.esalt),iterations:310000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
+ const LOCKS=[0,0,0,0,0,30,60,300,900,3600];// seconds of lockout after the n-th consecutive failure (persists across reloads)
  let open=false;
  function screen({title,sub,cancel}){return new Promise(res=>{open=true;const pr=S.profile||{};
   const el=document.createElement('div');el.className='lock';
@@ -122,15 +139,18 @@ const Lock=(()=>{
   $('#lk-b',el).onclick=()=>{v=v.slice(0,-1);dots();};$('#lk-c',el).onclick=()=>{if(cancel)done(null);};
   el.addEventListener('keydown',e=>{if(/^\d$/.test(e.key))press(e.key);});
   el.onPin=null;res.el=el;sub&&sub(el);});}
- async function unlock(cancel=false){const c=cfg();if(!c.pin)return true;let fails=0;
-  return screen({title:'Enter passcode',cancel,sub:el=>{el.onPin=async(p,api)=>{
-   if(c.until&&Date.now()<c.until){api.msg('Try again in '+Math.ceil((c.until-Date.now())/1000)+' s');return;}
-   if(await hash(p,unhex(c.salt))===c.pin){haptic('success');api.done(true);}else{fails++;if(fails>=5){c.until=Date.now()+30000;save(c);fails=0;}api.fail(fails?'Wrong passcode':'Too many attempts — wait 30 s');}};}});}
+ async function unlock(cancel=false){const c=cfg();if(!c.pin)return true;
+  return screen({title:c.until&&Date.now()<c.until?'Locked — try again in '+Math.ceil((c.until-Date.now())/1000)+' s':'Enter passcode',cancel,sub:el=>{el.onPin=async(p,api)=>{
+   if(c.until&&Date.now()<c.until){api.msg('Locked — try again in '+Math.ceil((c.until-Date.now())/1000)+' s');return;}
+   if(await hash(p,unhex(c.salt))===c.pin){c.fails=0;c.until=0;save(c);if(!DB.hasKey()){const k=await deriveKey(p,c);if(k){DB.setKey(k);await DB.migrate();}}haptic('success');api.done(true);}
+   else{c.fails=(c.fails||0)+1;const w=LOCKS[Math.min(c.fails,LOCKS.length-1)];if(w){c.until=Date.now()+w*1000;}save(c);
+    api.fail(w?`Too many attempts — locked for ${w>=60?Math.round(w/60)+' min':w+' s'}`:`Wrong passcode (${5-c.fails} left before lockout)`);}};}});}
  async function setPin(cancel=true){let first=null;
   return screen({title:'Create a 4‑digit passcode',cancel,sub:el=>{el.onPin=async(p,api)=>{
    if(!first){first=p;api.msg('Confirm passcode');return;}
    if(p!==first){first=null;api.fail('Passcodes didn’t match — try again');setTimeout(()=>api.msg('Create a 4‑digit passcode'),900);return;}
-   const salt=crypto.getRandomValues(new Uint8Array(16));save({pin:await hash(p,salt),salt:hex(salt)});haptic('success');api.done(true);};}});}
+   const salt=crypto.getRandomValues(new Uint8Array(16));const c={pin:await hash(p,salt),salt:hex(salt),esalt:hex(crypto.getRandomValues(new Uint8Array(16)))};save(c);
+   const k=await deriveKey(p,c);if(k){if(DB.hasKey())await DB.rekey(k);else{DB.setKey(k);await DB.migrate();}}haptic('success');api.done(true);};}});}
  return{cfg,unlock,setPin,isOpen:()=>open,has:()=>!!cfg().pin};})();
 /* ---------------- image tools: circular crop + signature ---------------- */
 function readFile(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=r.result;};r.onerror=rej;r.readAsDataURL(f);});}
@@ -203,6 +223,7 @@ function chips(p){const b=bmi(p),c=[],f=cls(p);const ch=(k,lab,val,fl)=>`<span c
  if(p.pr!=null)c.push(ch('pr','PR',p.pr,f.pr));
  if(p.rr!=null)c.push(ch('rr','RR',p.rr,f.rr));
  if(p.spo2!=null)c.push(ch('s','SpO₂',p.spo2+'%',f.spo2));
+ if(p.gluc!=null)c.push(ch('g','Glu',p.gluc,''));if(p.pain!=null)c.push(ch('pn','Pain',p.pain+'/10',p.pain>=7?'warn':''));
  if(b!=null)c.push(ch('b','BMI',f1(b),flagBMI(b)));
  if(p.age!=null||p.infant)c.push(`<span class="chip"><b>Age</b>${p.infant?'Infant':p.age}</span>`);
  return c.join('');}
@@ -252,7 +273,7 @@ function completeRule(k,v){const d=v.replace(/\D/g,'');const f=d[0];
   case'pr':return (d.length===3&&(f==='1'||f==='2'))||(d.length===2&&f>='3')?'now':'';
   case'rr':return d.length>=2?'now':'';
   case'spo2':return d.length===3||(d.length===2&&f>='4')?'now':'';}return'';}
-const FIELD_IDS={name:'f-name',mrn:'f-mrn',age:'f-age',ht:'f-ht',wt:'f-wt',sys:'f-sys',dia:'f-dia',temp:'f-temp',pr:'f-pr',rr:'f-rr',spo2:'f-spo2'};
+const FIELD_IDS={name:'f-name',mrn:'f-mrn',age:'f-age',ht:'f-ht',wt:'f-wt',sys:'f-sys',dia:'f-dia',temp:'f-temp',pr:'f-pr',rr:'f-rr',spo2:'f-spo2',gluc:'f-gluc',pain:'f-pain'};
 function modal(html,cls=''){const m=document.createElement('div');m.className='modal-scrim';m.innerHTML=`<div class="modal ${cls}" role="alertdialog" aria-modal="true">${html}</div>`;document.body.appendChild(m);return m;}
 function criticalModal(list){return new Promise(res=>{haptic('error');const m=modal(`<div class="mhead crit"><span>⚠︎</span>Critical values</div>
  <div class="mbody"><p>These readings are in the critical range. Re-check, then escalate per protocol.</p><div class="critlist">${list.map(c=>`<div><b>${esc(c.label)}</b><span>${esc(c.value)} ${esc(c.unit)}</span></div>`).join('')}</div></div>
@@ -275,6 +296,7 @@ function openEntry(p,isNew){const root=$('#sheet-root');const v=x=>x==null?'':x;
   <div class="lbl"><span>Blood pressure</span><span class="st" id="st-bp"></span></div><div class="big bp" data-k="bp"><input id="f-sys" inputmode="numeric" pattern="[0-9]*" enterkeyhint="next" placeholder="120" value="${v(p.sys)}"><span class="sl">/</span><input id="f-dia" inputmode="numeric" pattern="[0-9]*" enterkeyhint="next" placeholder="80" value="${v(p.dia)}"><span class="u">mmHg</span></div>
   <div class="grid2">${F('temp','Temp','°C','decimal','36.8')}${F('pr','Pulse','bpm','numeric','72')}</div>
   <div class="grid2">${F('rr','Resp. rate','/min','numeric','18')}${F('spo2','SpO₂','%','numeric','100')}</div>
+  <div class="grid2">${F('gluc','Glucose','mmol/L','decimal','5.5')}${F('pain','Pain','/10','numeric','0')}</div>
   <div class="hint" id="e-h"></div>
   <div class="bmi"><span style="font-weight:600">BMI</span><span><span class="v" id="bmi-v">—</span> <span id="bmi-l" style="color:var(--sub);font-size:14px;font-weight:600"></span></span></div>
   ${isNew?'':'<button class="btn d block" id="e-del">Delete Patient</button>'}
@@ -286,7 +308,7 @@ function openEntry(p,isNew){const root=$('#sheet-root');const v=x=>x==null?'':x;
  if(vv&&vv.height<innerHeight-80)fitVV();const onVV=()=>{if(vv.height<innerHeight-80)fitVV();else{sheet.style.height='';sheet.parentElement.style.alignItems='';sheet.parentElement.style.paddingTop='';}};vv&&vv.addEventListener('resize',onVV);
  const order=['f-name','f-age','f-ht','f-wt','f-sys','f-dia','f-temp','f-pr','f-rr','f-spo2'];const keyOf={'f-age':'age','f-ht':'ht','f-wt':'wt','f-sys':'sys','f-dia':'dia','f-temp':'temp','f-pr':'pr','f-rr':'rr','f-spo2':'spo2'};
  let rrAuto=p.rrAuto!==false;
- const read=()=>({name:$('#f-name').value.trim(),mrn:$('#f-mrn').value.trim().toUpperCase(),infant:$('#f-infant').checked,age:$('#f-infant').checked?null:num($('#f-age').value),ht:num($('#f-ht').value),wt:num($('#f-wt').value),sys:num($('#f-sys').value),dia:num($('#f-dia').value),temp:num($('#f-temp').value),pr:num($('#f-pr').value),rr:num($('#f-rr').value),spo2:num($('#f-spo2').value)});
+ const read=()=>({name:$('#f-name').value.trim(),mrn:$('#f-mrn').value.trim().toUpperCase(),infant:$('#f-infant').checked,age:$('#f-infant').checked?null:num($('#f-age').value),ht:num($('#f-ht').value),wt:num($('#f-wt').value),sys:num($('#f-sys').value),dia:num($('#f-dia').value),temp:num($('#f-temp').value),pr:num($('#f-pr').value),rr:num($('#f-rr').value),spo2:num($('#f-spo2').value),gluc:num($('#f-gluc').value),pain:num($('#f-pain').value)});
  const LBL={ok:['Normal','var(--ok)'],warn:['High','var(--warn)'],low:['Low','var(--low)'],crit:['CRITICAL','var(--crit)'],'':['','']};
  const update=(all)=>{const q=read(),e=validate(q),f=cls(q);
   const set=(k,fl,err)=>{const b=root.querySelector(`[data-k="${k}"]`);b.classList.remove('ok','warn','bad','low','err','crit');if(err)b.classList.add('err');else if(fl)b.classList.add(fl);};
@@ -348,7 +370,7 @@ function renderSettings(){window.onscroll=null;const pr=S.profile||{};
   <button class="cell" id="s-lock"><div class="grow" style="color:var(--navy)">Lock Now</div></button></div>
  <div class="sec">Data & privacy</div><div class="group"><div class="cell"><div class="grow" style="font-size:15px;line-height:1.4">Patient data is stored only on this iPhone (${DB.mode}). The app makes no network requests and contains no analytics or tracking.</div></div>
   <div class="cell"><div class="grow">Patients stored</div><span style="color:var(--sub)">${S.patients.length}</span></div>
-  <button class="cell" id="s-wipe"><div class="grow" style="color:var(--bad)">Erase All Patient Data</div></button></div>
+  <button class="cell" id="s-wipe"><div class="grow" style="color:var(--bad)">Erase All Patient Data & Roster</div></button></div>
  <div class="sec">About</div><div class="group"><div class="about-logos"><img class="about-main" src="${LOGO}" alt="Al Hili Clinic"></div>
   <div class="about-logos" style="padding-top:0"><img src="${AS('img/seha-uae.png')}" alt="SEHA"><img src="${AS('img/seha-clinics.png')}" alt="SEHA Clinics"><img src="${AS('img/seha-adhs.jpg')}" alt="SEHA Abu Dhabi Health Services"></div>
   <div class="cell"><div class="grow">Al Hili Vitals</div><span style="color:var(--sub)">Version ${VERSION}</span></div>
@@ -360,7 +382,7 @@ function renderSettings(){window.onscroll=null;const pr=S.profile||{};
  $('#s-pin').onclick=async()=>{if(await Lock.unlock(true)){if(await Lock.setPin(true))toast('Passcode changed');}};
  $('#s-auto').onchange=e=>localStorage.setItem('ahv_autolock',e.target.checked?'1':'0');
  $('#s-lock').onclick=lockNow;
- $('#s-wipe').onclick=async()=>{if(!confirm('Erase ALL patient records on this device? This cannot be undone.'))return;if(!(await Lock.unlock(true)))return;await DB.clear();await load();renderSettings();toast('All patient data erased');};
+ $('#s-wipe').onclick=async()=>{if(!confirm('Erase ALL patient records on this device? This cannot be undone.'))return;if(!(await Lock.unlock(true)))return;await DB.clear();for(const k of ['roster','rosterTeam'])await DB.kdel(k);S.roster={};S.rosterMeta={};S.team=null;await load();renderSettings();toast('All patient data and roster erased');};
  $$('.about-logos img').forEach(i=>i.loading='lazy');}
 async function lockNow(){$('#sheet-root').innerHTML='';await Lock.unlock(false);}
 /* ---------------- exports ---------------- */
@@ -435,8 +457,8 @@ const Export=(()=>{
   for(let k=0;k<6&&out.length>limit;k++){w*=.7;h*=.7;const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,w,h);g.drawImage(im,0,0,w,h);out=c.toDataURL('image/jpeg',.8);}return out.length<=limit?out:'';}
  function tableRows(list){const pr=S.profile||{};return list.map((p,i)=>{const b=bmi(p),f=cls(p);const d=new Date(p.ts);
   const fl=['bp','temp','pr','rr','spo2'].filter(k=>f[k]&&f[k]!=='ok').map(k=>k.toUpperCase()+':'+({warn:'high',low:'low',crit:'CRITICAL'})[f[k]]).join('; ');
-  return[i+1,dayKey(p.ts),pad2(d.getHours())+':'+pad2(d.getMinutes()),p.name,p.mrn||'',p.infant?'infant':(p.age??''),p.ht,p.wt,b?f1(b):'',p.sys,p.dia,p.temp,p.pr,p.rr,p.spo2,f.critical.length?'YES':'',fl,pr.name,pr.staffId];});}
-const HEAD=['No','Entered_Date','Entered_Time','Name','MRN','Age','Height_cm','Weight_kg','BMI','BP_Systolic','BP_Diastolic','Temp_C','Pulse_bpm','Resp_Rate','SpO2_pct','Critical','Flags','Nurse_Name','Staff_ID'];
+  return[i+1,dayKey(p.ts),pad2(d.getHours())+':'+pad2(d.getMinutes()),p.name,p.mrn||'',p.infant?'infant':(p.age??''),p.ht,p.wt,b?f1(b):'',p.sys,p.dia,p.temp,p.pr,p.rr,p.spo2,p.gluc??'',p.pain??'',f.critical.length?'YES':'',fl,pr.name,pr.staffId];});}
+const HEAD=['No','Entered_Date','Entered_Time','Name','MRN','Age','Height_cm','Weight_kg','BMI','BP_Systolic','BP_Diastolic','Temp_C','Pulse_bpm','Resp_Rate','SpO2_pct','Glucose_mmolL','Pain_0_10','Critical','Flags','Nurse_Name','Staff_ID'];
 async function metaRows(list,scope,title){const pr=S.profile||{};const now=new Date();return[['Report','Al Hili Vitals – '+(title||'Vital Signs Report')],['Scope',scope],['Exported_At',dayKey(now)+' '+pad2(now.getHours())+':'+pad2(now.getMinutes())+':'+pad2(now.getSeconds())],
    ['Patients',list.length],['Abnormal',list.filter(abnormal).length],['Critical',list.filter(critical).length],
    ['Nurse_Name',pr.name],['Staff_ID',pr.staffId],['Nurse_Photo',await shrink(pr.photo,30000)],['Nurse_Signature',await shrink(pr.signature,30000)],['Critical_Ranges',RG.describe(RANGES())],['Copyright',COPY+' '+EMAIL]];}
@@ -445,7 +467,7 @@ async function csv(list,scope,opt={}){const q=v=>{v=v==null?'':String(v);return 
 async function xlsx(list,scope,opt={}){if(!window.XLSX)await new Promise((r,j)=>{const sc=document.createElement('script');sc.src='vendor/xlsx/xlsx.full.min.js';sc.onload=r;sc.onerror=j;document.head.appendChild(sc);});
   const wb=XLSX.utils.book_new();const meta=(await metaRows(list,scope,opt.title)).map(r=>r[0]==='Nurse_Photo'||r[0]==='Nurse_Signature'?[r[0],r[1]?'(image embedded in PDF; data URI in CSV)':'']:r);
   const ws1=XLSX.utils.aoa_to_sheet([['Al Hili Vitals — '+(opt.title||'Vital Signs Report')],[],...meta]);ws1['!cols']=[{wch:18},{wch:90}];XLSX.utils.book_append_sheet(wb,ws1,'Summary');
-  const ws2=XLSX.utils.aoa_to_sheet([HEAD,...tableRows(list)]);ws2['!cols']=HEAD.map(h=>({wch:Math.max(8,h.length+2)}));ws2['!cols'][3]={wch:24};ws2['!autofilter']={ref:'A1:S1'};XLSX.utils.book_append_sheet(wb,ws2,'Patients');
+  const ws2=XLSX.utils.aoa_to_sheet([HEAD,...tableRows(list)]);ws2['!cols']=HEAD.map(h=>({wch:Math.max(8,h.length+2)}));ws2['!cols'][3]={wch:24};ws2['!autofilter']={ref:'A1:U1'};XLSX.utils.book_append_sheet(wb,ws2,'Patients');
   const R=RANGES();const rr=[['Group','Vital','Critical low (<)','Normal min','Normal max','Critical high (≥)']];Object.values(R).forEach(g=>RG.VITALS.forEach(([k,l])=>rr.push([g.label,l,...g[k]])));XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rr),'Ranges');
   const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});return new File([out],fname('xlsx'),{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});}
 async function deliver(files,share){if(navigator.canShare&&navigator.canShare({files})){try{await navigator.share({files,title:'Vital Signs Report'});return;}catch(e){if(e.name==='AbortError')return;}}
@@ -456,8 +478,9 @@ async function deliver(files,share){if(navigator.canShare&&navigator.canShare({f
 async function boot(){
 if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!window.__SINGLE__&&!window.Capacitor)navigator.serviceWorker.register('sw.js').catch(()=>{});
  document.body.insertAdjacentHTML('beforeend','<label id="hap" style="position:fixed;left:-99px;top:0;opacity:0;pointer-events:none"><input type="checkbox" switch></label>');
- const sp=(window.AHV.intro?window.AHV.intro():splash());await load();S.profile=await DB.kget('profile');window.AHV.loadExtras&&await window.AHV.loadExtras();await sp;
+ const sp=(window.AHV.intro?window.AHV.intro():splash());S.profile=await DB.kget('profile');await sp;
  if(!S.profile||!Lock.has()){await setupScreen();}else{await Lock.unlock(false);}
+ await load();window.AHV.loadExtras&&await window.AHV.loadExtras();
  if(window.AHV.onboard&&!window.AHV.onboardSeen())await window.AHV.onboard();
  go('home');window.AHV.startReminders&&window.AHV.startReminders();
  let hid=0;document.addEventListener('visibilitychange',async()=>{if(document.hidden)hid=Date.now();

@@ -1,4 +1,4 @@
-/*! Al Hili Vitals 3.2 — intro: waving UAE flag → Al Hili Clinic logo reveal. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
+/*! Al Hili Vitals 3.3 — intro: waving UAE flag → Al Hili Clinic logo reveal. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
 (function(){'use strict';const A=window.AHV=window.AHV||{};
 A.intro=function(){return new Promise(res=>{const LOGO=(window.__ASSETS__&&__ASSETS__['icons/logo-900.png'])||'icons/logo-900.png';
  const el=document.createElement('div');el.className='intro';

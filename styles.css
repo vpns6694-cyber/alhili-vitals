@@ -519,3 +519,19 @@ input[type=range]{width:100%;accent-color:var(--navy)}
 .obci{gap:var(--s3)}.obtick{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;box-shadow:var(--inset-s);color:var(--sub);font-weight:800;flex:none}
 .obci.ok .obtick{background:var(--ok);color:#fff;box-shadow:none}
 .onb [hidden]{display:none!important}
+/* 3.3 voice */
+.vseg{margin-bottom:var(--s3)}.vseg button{font-size:13px}
+.mic{cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}.mic.hidden{display:none}
+.vlive{min-height:44px;padding:var(--s2) var(--s3);border-radius:10px;box-shadow:inset -3px -3px 6px rgba(255,250,244,.78),inset 3px 3px 7px rgba(160,143,126,.27);font:var(--t-sub);color:var(--ink,#2F2823);margin-bottom:var(--s3);overflow-wrap:anywhere}
+.vlive .int{color:#6B6460;font-style:italic}
+.vchips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:var(--s3)}
+.vchip{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border:0;border-radius:10px;background:var(--bg);box-shadow:var(--raise-s);font:inherit;color:#6B6460;min-width:0}
+.vchip b{font-size:11px;font-weight:700;letter-spacing:.02em}.vchip span{font-size:14px;font-weight:700;color:#2F2823;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.vchip.got{box-shadow:inset -3px -3px 6px rgba(255,250,244,.78),inset 3px 3px 7px rgba(160,143,126,.27);color:#1B4565}.vchip.got span{color:#1B4565}
+.vchip.bad span,.vchip.bad b{color:var(--crit)}.vchip.retry{outline:2px solid #37AFC8}
+.vchip.flash{animation:vflash .6s}@keyframes vflash{0%{background:#37AFC833}100%{background:var(--bg)}}
+.vopts{display:flex;justify-content:space-between;align-items:center;gap:var(--s2);margin-top:var(--s2);font:var(--t-sub);font-weight:600}
+.vopts select{font:inherit;padding:6px 8px;border-radius:10px;border:0;background:var(--bg);box-shadow:var(--raise-s);color:#2F2823}
+.cl.bad{outline:2px solid var(--crit)}.cl .clerr{grid-column:2/-1;font-style:normal;font:var(--t-cap);color:var(--crit)}
+.vchip span{display:block;width:100%;text-align:center}.vchip[data-f=name],.vchip[data-f=mrn]{grid-column:span 2}
+.vmodal #v-txt{font:var(--t-sub);font-family:inherit;line-height:1.4}.vlive.hidden{display:none}

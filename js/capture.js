@@ -1,35 +1,80 @@
-/*! Al Hili Vitals 3.2 — fast capture (voice, monitor OCR, wristband scan), Copy-for-system helper, end-of-shift summary,
+/*! Al Hili Vitals 3.3 — fast capture (voice, monitor OCR, wristband scan), Copy-for-system helper, end-of-shift summary,
     ranges & copy-order settings. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae */
 (function(){'use strict';const A=window.AHV,P=window.AHVParse,RG=window.AHVRanges,SH=window.AHVShift;const $=A.$,$$=A.$$,esc=A.esc;
-const LBL={name:'Name',mrn:'MRN / ID',age:'Age',infant:'Baby/infant',ht:'Height',wt:'Weight',sys:'Systolic',dia:'Diastolic',temp:'Temp',pr:'Pulse',rr:'Resp. rate',spo2:'SpO₂'};
-const UNIT={age:'y',ht:'cm',wt:'kg',sys:'mmHg',dia:'mmHg',temp:'°C',pr:'bpm',rr:'/min',spo2:'%'};
+const LBL={name:'Name',mrn:'MRN / ID',age:'Age',infant:'Baby/infant',ht:'Height',wt:'Weight',sys:'Systolic',dia:'Diastolic',temp:'Temp',pr:'Pulse',rr:'Resp. rate',spo2:'SpO₂',gluc:'Glucose',pain:'Pain'};
+const UNIT={age:'y',ht:'cm',wt:'kg',sys:'mmHg',dia:'mmHg',temp:'°C',pr:'bpm',rr:'/min',spo2:'%',gluc:'mmol/L',pain:'/10'};
 const prevLoad=A.loadExtras;A.loadExtras=async()=>{await prevLoad();A.S.ranges=(await A.DB.kget('ranges'))||JSON.parse(JSON.stringify(RG.DEFAULT_RANGES));A.S.copyOrder=(await A.DB.kget('copyOrder'))||DEFAULT_ORDER.slice();};
 const DEFAULT_ORDER=['mrn','name','age','sys','dia','pr','temp','rr','spo2','wt','ht'];
 const native=n=>window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins[n];
 function confirmParsed(o,title,fill,raw){const keys=Object.keys(LBL).filter(k=>o[k]!=null&&o[k]!=='');
- if(!keys.length){A.toast('Nothing recognised — try again');A.haptic('error');return;}
+ if(!keys.length){A.toast('Nothing recognised — try again');A.haptic('error');return;}const iss=P.voiceIssues?P.voiceIssues(o):{};
  const m=A.modal(`<div class="mhead">${esc(title)}</div><div class="mbody">${raw?`<div class="rawtxt">“${esc(raw)}”</div>`:''}
-  <div class="confirmlist">${keys.map(k=>`<label class="cl"><input type="checkbox" checked data-k="${k}"><span>${LBL[k]}</span><input class="clv" data-v="${k}" value="${esc(k==='infant'?'yes':o[k])}" ${k==='infant'?'readonly':''}><i>${UNIT[k]||''}</i></label>`).join('')}</div>
+  <div class="confirmlist">${keys.map(k=>`<label class="cl${iss[k]?' bad':''}"><input type="checkbox" ${iss[k]?'':'checked'} data-k="${k}"><span>${LBL[k]}</span><input class="clv" data-v="${k}" value="${esc(k==='infant'?'yes':o[k])}" ${k==='infant'?'readonly':''}><i>${UNIT[k]||''}</i>${iss[k]?`<em class="clerr">${esc(iss[k])} — check or untick</em>`:''}</label>`).join('')}</div>
   <p class="small">Check each value, edit if needed, then apply. Nothing is saved until you tap Save.</p></div>
   <div class="mfoot"><button class="btn" id="cp-x">Cancel</button><button class="btn p" id="cp-ok">Apply to form</button></div>`);
  $('#cp-x',m).onclick=()=>m.remove();
  $('#cp-ok',m).onclick=()=>{const out={};$$('.cl',m).forEach(l=>{const k=$('[data-k]',l).dataset.k;if(!$('[data-k]',l).checked)return;const v=$('.clv',l).value.trim();out[k]=k==='infant'?true:(k==='name'||k==='mrn')?v:(v===''?null:Number(v.replace(',','.')));});m.remove();fill(out);};}
 A.confirmParsed=confirmParsed;
-/* ---------- (a) voice ---------- */
-A.voiceEntry=function(fill){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const NS=native('SpeechRecognition');
- const m=A.modal(`<div class="mhead">Voice entry</div><div class="mbody"><div class="mic" id="v-mic"><span></span></div><div class="vstate" id="v-st">${NS||SR?'Listening… say e.g. “Ahmed, age 45, BP 120 over 80, pulse 76, temp 37.2, sat 98”':'Speech recognition is not available here. Use the keyboard dictation mic, or type the phrase:'}</div>
-  <textarea class="ta" id="v-txt" placeholder="Ahmed, age 45, BP 120 over 80, pulse 76, temp 37.2, weight 70, height 170, RR 18, sat 98"></textarea></div>
-  <div class="mfoot"><button class="btn" id="v-x">Cancel</button><button class="btn p" id="v-go">Review</button></div>`);
- let rec=null,stop=()=>{try{rec&&rec.stop();}catch(e){}try{NS&&NS.stop();}catch(e){}};
- const set=t=>{$('#v-txt',m).value=t;};
- if(NS){(async()=>{try{await NS.requestPermissions();NS.addListener('partialResults',d=>set((d.matches||[])[0]||''));await NS.start({language:'en-US',partialResults:true,popup:false,maxResults:1});}catch(e){$('#v-st',m).textContent='Microphone/speech permission needed: '+e.message;}})();}
- else if(SR){rec=new SR();rec.lang='en-US';rec.interimResults=true;rec.continuous=true;let fin='';
-  rec.onresult=e=>{let int='';for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)fin+=e.results[i][0].transcript+' ';else int+=e.results[i][0].transcript;}set((fin+int).trim());};
-  rec.onerror=e=>{$('#v-st',m).textContent=e.error==='not-allowed'?'Microphone permission denied — type or use keyboard dictation.':'Speech error: '+e.error;$('#v-mic',m).classList.add('off');};
-  rec.onend=()=>$('#v-mic',m).classList.add('off');try{rec.start();}catch(e){}}
- else $('#v-mic',m).classList.add('off');
+/* ---------- (a) voice 3.3: continuous listening, live transcript, field highlight, tap/hold, silence auto-stop, retry per field, TTS read-back, dictation fallback ---------- */
+const VF=[['name','Name'],['mrn','MRN'],['age','Age'],['bp','BP'],['pr','Pulse'],['temp','Temp'],['rr','RR'],['spo2','SpO₂'],['gluc','Glucose'],['pain','Pain'],['wt','Weight'],['ht','Height']];
+const VKW={name:'name',mrn:'mrn',age:'age',bp:'bp',pr:'pulse',temp:'temp',rr:'resp',spo2:'sat',gluc:'sugar',pain:'pain',wt:'weight',ht:'height'};
+const vpref=()=>{try{return Object.assign({mode:'tap',lang:'en-US',tts:false,silence:4},JSON.parse(localStorage.getItem('ahv_voice')||'{}'));}catch(e){return{mode:'tap',lang:'en-US',tts:false,silence:4};}};
+const vsave=p=>localStorage.setItem('ahv_voice',JSON.stringify(p));
+const isStandalone=()=>navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);
+const isIOS=()=>/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+A.speak=function(text,lang){try{if(!window.speechSynthesis)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang=lang||'en-US';u.rate=1.05;speechSynthesis.speak(u);}catch(e){}};
+const readBack=o=>{const s=[];if(o.name)s.push(o.name);if(o.mrn)s.push('M R N '+String(o.mrn).split('').join(' '));if(o.age!=null)s.push('age '+o.age);if(o.sys!=null)s.push('B P '+o.sys+' over '+o.dia);if(o.pr!=null)s.push('pulse '+o.pr);
+ if(o.temp!=null)s.push('temperature '+o.temp);if(o.rr!=null)s.push('respiration '+o.rr);if(o.spo2!=null)s.push('saturation '+o.spo2+' percent');if(o.gluc!=null)s.push('glucose '+o.gluc);if(o.pain!=null)s.push('pain '+o.pain+' of 10');if(o.wt!=null)s.push('weight '+o.wt);if(o.ht!=null)s.push('height '+o.ht);return s.join(', ');};
+A.voiceEntry=function(fill){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const NS=native('SpeechRecognition');const pf=vpref();
+ const live=!!(NS||SR);const iosPWA=isIOS()&&isStandalone()&&!NS;
+ const m=A.modal(`<div class="mhead">Voice entry</div><div class="mbody">
+  <div class="seg vseg" id="v-mode"><button data-m="tap" class="${pf.mode==='tap'?'on':''}">Tap to talk</button><button data-m="hold" class="${pf.mode==='hold'?'on':''}">Hold to talk</button><button data-m="type" class="${!live?'on':''}">Dictate / type</button></div>
+  <div class="mic off" id="v-mic" role="button" tabindex="0" aria-label="Microphone"><span></span></div>
+  <div class="vstate" id="v-st"></div>
+  <div class="vlive" id="v-live" aria-live="polite"><span class="fin"></span><span class="int"></span></div>
+  <div class="vchips" id="v-ch">${VF.map(([k,l])=>`<button type="button" class="vchip" data-f="${k}"><b>${l}</b><span>—</span></button>`).join('')}</div>
+  <textarea class="ta" id="v-txt" rows="2" dir="auto" placeholder="Tap here and use the 🎤 key on your keyboard, or type: BP 120 over 80, pulse 76, temp 37.2, sat 98"></textarea>
+  <div class="vopts"><label><input type="checkbox" id="v-tts" ${pf.tts?'checked':''}> Read back</label><select id="v-lang" aria-label="Language"><option value="en-US">English</option><option value="en-GB">English (UK)</option><option value="ar-AE">العربية</option></select></div>
+  <p class="small" id="v-help"></p></div>
+  <div class="mfoot"><button class="btn" id="v-x">Cancel</button><button class="btn p" id="v-go">Review</button></div>`,'vmodal');
+ $('#v-lang',m).value=pf.lang;
+ const st=t=>$('#v-st',m).textContent=t;let fin='',interim='',retry=null,rec=null,on=false,silT=null,mode=live?pf.mode:'type';
+ const transcript=()=>($('#v-txt',m).value||'').trim();
+ const render=()=>{const t=transcript();const o=P.parseVoice(t);const iss=P.voiceIssues(o);
+  $$('.vchip',m).forEach(c=>{const k=c.dataset.f;const v=k==='bp'?(o.sys!=null?o.sys+'/'+o.dia:null):o[k];const was=c.classList.contains('got');const sp=$('span',c);const nv=v==null?'—':String(v);
+   c.classList.toggle('got',v!=null);c.classList.toggle('bad',!!(iss[k]||(k==='bp'&&(iss.sys||iss.dia))));if(sp.textContent!==nv){sp.textContent=nv;if(v!=null){c.classList.remove('flash');void c.offsetWidth;c.classList.add('flash');if(!was)A.haptic();}}});return o;};
+ const setText=()=>{$('#v-txt',m).value=(fin+' '+interim).replace(/\s+/g,' ').trim();$('.fin',$('#v-live',m)).textContent=fin.trim()+' ';$('.int',$('#v-live',m)).textContent=interim;render();};
+ const addFinal=t=>{t=(t||'').trim();if(!t)return;if(retry){t=VKW[retry]+' '+t;$$('.vchip',m).forEach(c=>c.classList.remove('retry'));retry=null;}fin+=' '+t;interim='';setText();};
+ const armSilence=()=>{clearTimeout(silT);if(mode==='tap'&&on)silT=setTimeout(()=>{stop();st('Stopped after '+pf.silence+' s of silence — tap the mic to continue, or Review.');},pf.silence*1000);};
+ const micUI=()=>{$('#v-mic',m).classList.toggle('off',!on);$('#v-mic',m).classList.toggle('hidden',mode==='type');};
+ let nsH=null;
+ async function start(){if(on||mode==='type')return;on=true;micUI();st(retry?`Say the ${VF.find(x=>x[0]===retry)[1]} value…`:'Listening… say e.g. “BP 120 over 80, pulse 76, temp 37.2, sat 98”');armSilence();
+  const lang=$('#v-lang',m).value;
+  if(NS){try{await NS.requestPermissions();nsH&&nsH.remove&&nsH.remove();nsH=await NS.addListener('partialResults',d=>{interim=(d.matches||[])[0]||'';setText();armSilence();});await NS.start({language:lang,partialResults:true,popup:false,maxResults:1});}catch(e){on=false;micUI();st('Microphone/speech permission needed: '+(e.message||e));}return;}
+  rec=new SR();rec.lang=lang;rec.interimResults=true;rec.continuous=true;rec.maxAlternatives=1;
+  rec.onresult=e=>{let int='';for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)addFinal(e.results[i][0].transcript);else int+=e.results[i][0].transcript;}interim=int;setText();armSilence();};
+  rec.onerror=e=>{if(e.error==='no-speech')return;on=false;micUI();st(e.error==='not-allowed'||e.error==='service-not-allowed'?'Microphone/speech not allowed here. Use “Dictate / type” and the 🎤 key on the keyboard.':e.error==='network'?'Speech service needs internet in this browser. Use “Dictate / type” (keyboard 🎤 works offline on iPhone).':'Speech error: '+e.error);};
+  rec.onend=()=>{if(interim){addFinal(interim);}if(on&&mode==='tap'){try{rec.start();return;}catch(e){}}on=false;micUI();};
+  try{rec.start();}catch(e){on=false;micUI();}}
+ function stop(){clearTimeout(silT);const was=on;on=false;try{rec&&rec.stop();}catch(e){}if(NS&&was){(async()=>{try{await NS.stop();}catch(e){}if(interim){addFinal(interim);}})();}micUI();}
+ const help=()=>{$('#v-help',m).innerHTML=mode==='type'?(iosPWA?'On iPhone Home-Screen apps, live speech is limited by iOS. Tap the box above, then the <b>🎤 mic key</b> on the keyboard (Siri dictation, works offline on iPhone 11 and newer). The same parser fills the fields.':live?'Tap the box and use the keyboard 🎤 key, or type. Fields fill as you speak.':'Live speech recognition is not available in this browser. Tap the box and use the keyboard 🎤 key, or type.')
+  :'Say fields in any order: “pulse 88, BP 120 over 80, sat 98, temp 37 point 2, sugar 6.5, pain 3”. Correct with “no, pulse 90”. Tap a field chip to re-say just that value. Arabic: «ضغط ١٢٠ على ٨٠، نبض ٨٨».';
+  $('#v-txt',m).classList.toggle('dict',mode==='type');$('#v-live',m).classList.toggle('hidden',mode==='type');};
+ const setMode=x=>{if(x!=='type'&&!live){A.toast('Live speech not available here — use dictation');x='type';}stop();mode=x;if(x!=='type'){pf.mode=x;vsave(pf);}$$('#v-mode button',m).forEach(b=>b.classList.toggle('on',b.dataset.m===x));micUI();help();
+  st(x==='type'?'Dictation mode':x==='hold'?'Hold the mic while you speak':'Tap the mic to start');if(x==='type')setTimeout(()=>$('#v-txt',m).focus(),50);else if(x==='tap')start();};
+ $$('#v-mode button',m).forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+ const mic=$('#v-mic',m);
+ mic.onclick=()=>{if(mode!=='tap')return;on?stop():start();};
+ mic.onpointerdown=e=>{if(mode!=='hold')return;e.preventDefault();start();};
+ ['pointerup','pointercancel','pointerleave'].forEach(ev=>mic.addEventListener(ev,()=>{if(mode==='hold'&&on)setTimeout(stop,250);}));
+ $('#v-txt',m).addEventListener('input',()=>{fin=$('#v-txt',m).value;interim='';$('.fin',$('#v-live',m)).textContent='';render();});
+ $$('.vchip',m).forEach(c=>c.onclick=()=>{const k=c.dataset.f;$$('.vchip',m).forEach(x=>x.classList.remove('retry'));c.classList.add('retry');
+  if(mode==='type'){const ta=$('#v-txt',m);ta.value=(ta.value.trim()+' '+VKW[k]+' ').trimStart();fin=ta.value;ta.focus();return;}retry=k;stop();setTimeout(start,150);});
+ $('#v-tts',m).onchange=e=>{pf.tts=e.target.checked;vsave(pf);};
+ $('#v-lang',m).onchange=e=>{pf.lang=e.target.value;vsave(pf);if(on){stop();setTimeout(start,200);}};
  $('#v-x',m).onclick=()=>{stop();m.remove();};
- $('#v-go',m).onclick=()=>{stop();const t=$('#v-txt',m).value.trim();m.remove();if(t)confirmParsed(P.parseVoice(t),'Confirm voice entry',fill,t);};};
+ $('#v-go',m).onclick=()=>{stop();setTimeout(()=>{const t=transcript();m.remove();if(t)confirmParsed(P.parseVoice(t),'Confirm voice entry',o=>{fill(o);if(pf.tts)A.speak('Applied: '+readBack(o));},t);},NS?250:0);};
+ setMode(mode);};
 /* ---------- (b) monitor photo OCR ---------- */
 function loadScript(src){return new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`)&&window.Tesseract)return res();const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('Could not load '+src));document.head.appendChild(s);});}
 async function prep(f){const url=URL.createObjectURL(f);const img=await new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=j;i.src=url;});
