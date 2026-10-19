@@ -2,7 +2,7 @@
     Local-only: all data in IndexedDB on this device. No network calls, no analytics. */
 (function(){
 'use strict';
-const VERSION='3.4.0';
+const VERSION='3.5.0';
 const COPY='Copyright (c) 2026 Abdalla Abbadi. All rights reserved.';
 const EMAIL='a.abbadi@edcad.ae';
 const AS=n=>(window.__ASSETS__&&window.__ASSETS__[n])||n;
@@ -16,7 +16,7 @@ const DB=(()=>{let dbp=null,fb=false;
  const L={get:k=>JSON.parse(localStorage.getItem('fb_'+k)||'null'),set:(k,v)=>localStorage.setItem('fb_'+k,JSON.stringify(v))};
  const g=(p,f)=>fb?Promise.resolve(f()):p().catch(()=>{fb=true;return f();});
  // 3.3: AES-GCM at rest. Key is derived from the passcode (PBKDF2-SHA256, 310k) at unlock and only kept in memory.
- let KEY=null;const ENCK=new Set(['roster','rosterTeam']);const te=new TextEncoder(),td=new TextDecoder();
+ let KEY=null;const ENCK=new Set(['roster','rosterTeam','schools']);const te=new TextEncoder(),td=new TextDecoder();
  const b64=u=>{let s='';const a=new Uint8Array(u);for(let i=0;i<a.length;i+=0x8000)s+=String.fromCharCode.apply(null,a.subarray(i,i+0x8000));return btoa(s);};
  const ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
  const enc=async v=>{if(!KEY)return v;const iv=crypto.getRandomValues(new Uint8Array(12));return{_e:1,iv:b64(iv),ct:b64(await crypto.subtle.encrypt({name:'AES-GCM',iv},KEY,te.encode(JSON.stringify(v))))};};
@@ -77,6 +77,7 @@ const I={cam:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke
  lock:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>',
  plus:'<svg width="28" height="28" viewBox="0 0 28 28"><path d="M14 5v18M5 14h18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
  cal:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+ school:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-5 9 5-9 5-9-5z"/><path d="M7 12.5V17c0 1.4 2.2 3 5 3s5-1.6 5-3v-4.5"/><path d="M21 10v5"/></svg>',
  pdf:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 15h6M9 11h3"/></svg>',
  csv:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>',
  print:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
@@ -101,6 +102,7 @@ function splash(){return new Promise(r=>{const el=document.createElement('div');
  el.innerHTML=`<img class="m" src="${LOGO}" alt="Al Hili Clinic"><div class="seha"><img src="${AS('img/seha-uae.png')}" alt="SEHA"><img src="${AS('img/seha-clinics.png')}" alt="SEHA Clinics"></div>`;
  document.body.appendChild(el);setTimeout(()=>{el.style.opacity='0';setTimeout(()=>{el.remove();r();},450);},900);});}
 /* ---------------- lock screen (liquid glass) ---------------- */
+let A_greetShown=0;
 const Lock=(()=>{
  const cfg=()=>{try{return JSON.parse(localStorage.getItem('ahv_lock')||'{}')}catch(e){return{}}};
  const save=c=>localStorage.setItem('ahv_lock',JSON.stringify(c));
@@ -114,18 +116,18 @@ const Lock=(()=>{
   return crypto.subtle.deriveKey({name:'PBKDF2',salt:unhex(c.esalt),iterations:310000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
  const LOCKS=[0,0,0,0,0,30,60,300,900,3600];// seconds of lockout after the n-th consecutive failure (persists across reloads)
  let open=false;
- function screen({title,sub,cancel}){return new Promise(res=>{open=true;const pr=S.profile||{};
+ function screen({title,sub,cancel,bio}){return new Promise(res=>{open=true;const pr=S.profile||{};
   const el=document.createElement('div');el.className='lock';
   el.innerHTML=`<div class="bg"><div class="kb" style="background-image:url('${BG}')"></div><div class="sun"></div></div><div class="ov"></div>
   <div class="clock"><div class="d" id="lk-d"></div><div class="t" id="lk-t"></div><div class="org">Al Hili Healthcare Center · SEHA</div></div>
   <div class="glass panel" id="lk-p"><span class="brand"><img src="${LOGO}" alt="Al Hili Clinic"></span>
    ${pr.name?`<div class="who">${pr.photo?`<img src="${pr.photo}" alt="">`:''}<div><div class="n">${esc(pr.name)}</div><div class="i">Staff ID ${esc(pr.staffId||'')}</div></div></div>`:''}
-   <div class="msg" id="lk-m">${esc(title)}</div><div class="dots">${'<i></i>'.repeat(4)}</div>
+   <div class="msg" id="lk-m">${esc(title)}</div>${bio?`<button class="faceid" id="lk-f" type="button"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><path d="M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 15.5c1.4 1.2 3.6 1.2 5 0"/></svg>Unlock with Face ID</button>`:''}<div class="dots">${'<i></i>'.repeat(4)}</div>
    <div class="pad">${[['1',''],['2','ABC'],['3','DEF'],['4','GHI'],['5','JKL'],['6','MNO'],['7','PQRS'],['8','TUV'],['9','WXYZ']].map(([n,l])=>`<button class="key" data-n="${n}">${n}${l?`<small>${l}</small>`:'<small>&nbsp;</small>'}</button>`).join('')}
    <button class="key t" id="lk-c">${cancel?'Cancel':''}</button><button class="key" data-n="0">0<small>&nbsp;</small></button><button class="key t" id="lk-b" aria-label="Delete">⌫</button></div></div>
   <div class="foot">Al Hili Vitals ${VERSION} · ${COPY}</div>`;
   document.body.appendChild(el);let v='';
-  const tick=()=>{const d=new Date();$('#lk-t',el).textContent=pad2(d.getHours())+':'+pad2(d.getMinutes());$('#lk-d',el).textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});};tick();const ti=setInterval(tick,1000);
+  const tick=()=>{const d=new Date();$('#lk-t',el).innerHTML=pad2(d.getHours())+':'+pad2(d.getMinutes())+'<small class="lks">'+pad2(d.getSeconds())+'</small>';$('#lk-d',el).textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});};tick();const ti=setInterval(tick,1000);
   // parallax: pointer / device tilt / slow auto sway
   const bg=$('.bg',el),pn=$('#lk-p',el);let t0=performance.now(),tx=0,ty=0,raf;
   const loop=now=>{const a=(now-t0)/1000;const ax=Math.sin(a/5)*6+tx,ay=Math.cos(a/7)*4+ty;bg.style.transform=`translate3d(${ax*-1.6}px,${ay*-1.6}px,0)`;pn.style.transform=`translate3d(${ax*.5}px,${ay*.5}px,0)`;raf=requestAnimationFrame(loop);};raf=requestAnimationFrame(loop);
@@ -140,18 +142,29 @@ const Lock=(()=>{
   el.addEventListener('keydown',e=>{if(/^\d$/.test(e.key))press(e.key);});
   el.onPin=null;res.el=el;sub&&sub(el);});}
  async function unlock(cancel=false){const c=cfg();if(!c.pin)return true;
-  return screen({title:c.until&&Date.now()<c.until?'Locked — try again in '+Math.ceil((c.until-Date.now())/1000)+' s':'Enter passcode',cancel,sub:el=>{el.onPin=async(p,api)=>{
+  const bio=!!(window.AHVBio&&AHVBio.enrolled());
+  const ok=await screen({title:c.until&&Date.now()<c.until?'Locked — try again in '+Math.ceil((c.until-Date.now())/1000)+' s':'Enter passcode',cancel,bio,sub:el=>{
+   const good=async(p,api)=>{if(await hash(p,unhex(c.salt))!==c.pin)return false;if(window.__wantPin){window.__lastPin=p;window.__wantPin=false;}c.fails=0;c.until=0;save(c);if(!DB.hasKey()){const k=await deriveKey(p,c);if(k){DB.setKey(k);await DB.migrate();}}haptic('success');api.done(true);return true;};
+   const fb=$('#lk-f',el);if(fb){const run=async()=>{if(c.until&&Date.now()<c.until)return;fb.disabled=true;try{const r=await AHVBio.unlockPin();if(typeof r==='string'){if(!(await good(r,el.api)))el.api.fail('Face ID passcode is out of date — enter your passcode');}
+     else if(r&&r.verifiedOnly)el.api.msg('Face ID confirmed — enter your passcode to open the encrypted records');}catch(e){el.api.msg('Face ID not available — enter passcode');}fb.disabled=false;};fb.onclick=run;if(!cancel)setTimeout(run,450);}
+   el.onPin=async(p,api)=>{
    if(c.until&&Date.now()<c.until){api.msg('Locked — try again in '+Math.ceil((c.until-Date.now())/1000)+' s');return;}
-   if(await hash(p,unhex(c.salt))===c.pin){c.fails=0;c.until=0;save(c);if(!DB.hasKey()){const k=await deriveKey(p,c);if(k){DB.setKey(k);await DB.migrate();}}haptic('success');api.done(true);}
+   if(await good(p,api)){}
    else{c.fails=(c.fails||0)+1;const w=LOCKS[Math.min(c.fails,LOCKS.length-1)];if(w){c.until=Date.now()+w*1000;}save(c);
-    api.fail(w?`Too many attempts — locked for ${w>=60?Math.round(w/60)+' min':w+' s'}`:`Wrong passcode (${5-c.fails} left before lockout)`);}};}});}
+    api.fail(w?`Too many attempts — locked for ${w>=60?Math.round(w/60)+' min':w+' s'}`:`Wrong passcode (${5-c.fails} left before lockout)`);}};}});
+  if(ok&&!cancel)greet();return ok;}
+ /* success: verification ring around the nurse's photo + time-of-day greeting */
+ function greet(){return new Promise(r=>{const pr=S.profile||{};const h=new Date().getHours();const g=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
+  const el=document.createElement('div');el.className='greet';el.innerHTML=`<div class="gcard"><div class="gph">${pr.photo?`<img src="${pr.photo}" alt="">`:''}<svg viewBox="0 0 120 120"><circle class="gr" cx="60" cy="60" r="56"/></svg><span class="gck">✓</span></div>
+   <div class="gh">${g},</div><div class="gn">${esc((pr.name||'').split(' ')[0]||'')}</div><div class="gs">Verified · ${esc(pr.name||'')}</div></div>`;document.body.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('on'));A_greetShown=Date.now();const end=()=>{el.classList.add('out');setTimeout(()=>{el.remove();r();},380);};el.onclick=end;setTimeout(end,matchMedia('(prefers-reduced-motion: reduce)').matches?900:1700);});}
  async function setPin(cancel=true){let first=null;
   return screen({title:'Create a 4‑digit passcode',cancel,sub:el=>{el.onPin=async(p,api)=>{
    if(!first){first=p;api.msg('Confirm passcode');return;}
    if(p!==first){first=null;api.fail('Passcodes didn’t match — try again');setTimeout(()=>api.msg('Create a 4‑digit passcode'),900);return;}
    const salt=crypto.getRandomValues(new Uint8Array(16));const c={pin:await hash(p,salt),salt:hex(salt),esalt:hex(crypto.getRandomValues(new Uint8Array(16)))};save(c);
    const k=await deriveKey(p,c);if(k){if(DB.hasKey())await DB.rekey(k);else{DB.setKey(k);await DB.migrate();}}haptic('success');api.done(true);};}});}
- return{cfg,unlock,setPin,isOpen:()=>open,has:()=>!!cfg().pin};})();
+ return{cfg,unlock,setPin,greet,hash,isOpen:()=>open,has:()=>!!cfg().pin};})();
 /* ---------------- image tools: circular crop + signature ---------------- */
 function readFile(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=r.result;};r.onerror=rej;r.readAsDataURL(f);});}
 function cropper(img){return new Promise(res=>{const root=$('#sheet-root');
@@ -214,7 +227,7 @@ const R={};
 function pageHead(title,right=''){return `<header class="nav" id="nav"><div class="topbar"><img class="logo-sm" src="${LOGO}" alt="Al Hili Clinic"><div class="navr">${right}</div></div><h1 class="large">${title}</h1>`;}
 function view(){let v=$('#view');if(!v){$('#app').innerHTML=`<div id="view"></div><nav class="tabbar" id="tabbar">${TABS.map(([k,l,p])=>`<button data-tab="${k}" aria-label="${l}"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg><span>${l}</span></button>`).join('')}</nav>`;
  $$('#tabbar [data-tab]').forEach(b=>b.onclick=()=>{haptic();b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop');go(b.dataset.tab);});v=$('#view');}return v;}
-function go(tab,opts){S.tab=tab;view();$$('#tabbar [data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===(tab==='batch'?'patients':tab)));window.onscroll=null;if(S.tick){clearInterval(S.tick);S.tick=null;}
+function go(tab,opts){S.tab=tab;view();$$('#tabbar [data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===(tab==='batch'||tab==='school'?'patients':tab)));window.onscroll=null;if(S.tick){clearInterval(S.tick);S.tick=null;}
  (tab==='patients'?renderPatients:tab==='settings'?renderSettings:R[tab]||renderPatients)(opts);if(!opts||!opts.keepScroll)scrollTo(0,0);}
 /* ---------------- patients ---------------- */
 function chips(p){const b=bmi(p),c=[],f=cls(p);const ch=(k,lab,val,fl)=>`<span class="chip ${fl}">${fl==='crit'?'⚠︎ ':''}<b>${lab}</b>${val}</span>`;
@@ -229,7 +242,7 @@ function chips(p){const b=bmi(p),c=[],f=cls(p);const ch=(k,lab,val,fl)=>`<span c
  return c.join('');}
 function card(p){return `<button class="pcard ${critical(p)?'iscrit':''}" data-id="${p.id}"><div class="num">${seqOf(p)}</div><div class="grow"><div class="pname ${p.name?'':'ph'}">${esc(p.name||'Unnamed patient')}</div><div class="ptop">${p.mrn?`<span class="mrn">${esc(p.mrn)}</span>`:''}<span class="ptime">${esc(fStamp(p.ts))}</span></div>${chips(p)?`<div class="chips">${chips(p)}</div>`:''}</div></button>`;}
 function greet(){const h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening';}
-function renderHome(){if(S.tab==='patients')renderPatients();else if(S.tab==='batch')R.batch({keepScroll:true});}
+function renderHome(){if(S.tab==='patients')renderPatients();else if(R[S.tab])R[S.tab]({keepScroll:true});}
 function renderPatients(){const pr=S.profile||{};const list=visible();const q=S.q.trim();
  const groups={};list.forEach(p=>(groups[dayKey(p.ts)]=groups[dayKey(p.ts)]||[]).push(p));
  const keys=Object.keys(groups).sort().reverse();
@@ -245,14 +258,14 @@ function renderPatients(){const pr=S.profile||{};const list=visible();const q=S.
  <div class="actions"><button class="act" id="x-pdf">${I.pdf}PDF</button><button class="act" id="x-csv">${I.csv}CSV</button><button class="act" id="x-xlsx">${I.csv}Excel</button><button class="act" id="x-print">${I.print}Print</button><button class="act" id="x-share">${I.share}Share</button></div>
  <button class="bbanner glassw" id="p-batch"><span class="light ${bp&&bp.split('/')[0]===bp.split('/')[1]?'green':bp?'amber':'grey'}"></span><div class="grow"><b>Shift batch</b><span>${bp?bp+' complete · tap to continue':'Scan a paper names list to start'}</span></div>${I.chev}</button>
  ${body}<div class="stamp">Al Hili Vitals ${VERSION} · Stored on this device only<br>${COPY}</div></main>
- <button class="fab" id="fab" aria-label="Add patient">${I.plus}</button>`;
+ <button class="fab2" id="fab-school" aria-label="School screening">${I.school}<span>School</span></button><button class="fab" id="fab" aria-label="Add patient">${I.plus}</button>`;
  const nav=$('#nav');const onS=()=>nav.classList.toggle('scrolled',scrollY>4);onS();window.onscroll=onS;
  $('#q').oninput=e=>{S.q=e.target.value;const pos=e.target.selectionStart;renderPatients();const n=$('#q');n.focus();try{n.setSelectionRange(pos,pos)}catch(_){}};
  $$('[data-v]').forEach(b=>b.onclick=()=>{S.view=b.dataset.v;haptic();renderPatients();});
  $('#h-batch').onclick=()=>{haptic();go('batch');};$('#p-batch').onclick=()=>{haptic();go('batch');};
  $('#dpick').onchange=e=>{if(e.target.value){S.day=e.target.value;S.view=S.day===todayKey()?'today':'day';renderPatients();}};
  $$('.pcard').forEach(b=>b.onclick=()=>openEntry(S.patients.find(p=>p.id===b.dataset.id),false));
- $('#fab').onclick=()=>{haptic('medium');newPatient();};
+ $('#fab').onclick=()=>{haptic('medium');newPatient();};$('#fab-school').onclick=()=>{haptic('medium');go('school');};
  $('#h-lock').onclick=lockNow;$('#h-set').onclick=()=>go('settings');
  const need=()=>{const l=visible();if(!l.length){toast('No patients to export');return null;}return l;};
  $('#x-pdf').onclick=async()=>{const l=need();if(l)Export.deliver([await Export.pdf(l,scopeLabel())],false);};
@@ -381,7 +394,7 @@ function renderSettings(){window.onscroll=null;const pr=S.profile||{};
   <div class="cell disabled" aria-disabled="true"><span class="ico gr">⇄</span><div class="grow">Shift Swap <span class="soon">Coming soon</span><div class="s">Request and approve shift swaps with colleagues, right from your roster.</div></div></div></div>
  <div class="sec">Shift batch</div><div class="group"><button class="cell" id="s-req"><span class="ico tq">✓</span><div class="grow">Required fields<div class="s">${['Name','MRN','Age','BP','Pulse','Temp','RR','SpO₂'].concat((S.reqExtras||[]).map(k=>({gluc:'Glucose',pain:'Pain',wt:'Weight',ht:'Height'})[k])).join(', ')}</div></div>${I.chev}</button></div>
  <div class="sec">Updates</div><div class="group"><button class="cell" id="s-new"><span class="ico tq">★</span><div class="grow">What’s New & Updates<div class="s">Version ${VERSION} · changelog</div></div>${I.chev}</button></div>
- <div class="sec">Security</div><div class="group"><button class="cell" id="s-pin"><div class="grow" style="color:var(--navy)">Change Passcode</div>${I.chev}</button>
+ <div class="sec">Security</div><div class="group"><button class="cell" id="s-pin"><div class="grow" style="color:var(--navy)">Change Passcode</div>${I.chev}</button><div class="cell"><div class="grow">Face ID unlock<div class="s" id="s-bio-s">${window.AHVBio&&AHVBio.enrolled()?(AHVBio.mode()==='passkey-noprf'?'On · passcode still needed for records':'On · passcode is the fallback'):'Off · set up after your passcode'}</div></div><input type="checkbox" class="switch" id="s-bio" aria-label="Face ID unlock" ${window.AHVBio&&AHVBio.enrolled()?'checked':''}></div>
   <label class="cell"><div class="grow">Auto-lock after 1 minute away</div><input type="checkbox" class="switch" id="s-auto" ${localStorage.getItem('ahv_autolock')!=='0'?'checked':''}></label>
   <button class="cell" id="s-lock"><div class="grow" style="color:var(--navy)">Lock Now</div></button></div>
  <div class="sec">Data & privacy</div><div class="group"><div class="cell"><div class="grow" style="font-size:15px;line-height:1.4">Patient data is stored only on this iPhone (${DB.mode}). The app makes no network requests and contains no analytics or tracking.</div></div>
@@ -399,6 +412,10 @@ function renderSettings(){window.onscroll=null;const pr=S.profile||{};
  $('#s-req').onclick=()=>{const X=[['gluc','Glucose'],['pain','Pain'],['wt','Weight'],['ht','Height']];const cur=new Set(S.reqExtras||[]);
   window.AHV.sheet('Required fields',`<p class="small">Always required: Name, MRN, Age, BP, Pulse, Temp, RR, SpO₂. Add extras:</p><div class="group">${X.map(([k,l])=>`<label class="cell"><div class="grow">${l}</div><input type="checkbox" class="rq" data-k="${k}" ${cur.has(k)?'checked':''}></label>`).join('')}</div>`);
   $$('.rq').forEach(c=>c.onchange=async()=>{S.reqExtras=$$('.rq').filter(x=>x.checked).map(x=>x.dataset.k);await DB.kset('reqExtras',S.reqExtras);haptic();});};
+ $('#s-bio').onchange=async e=>{const on=e.target.checked;if(!on){AHVBio.disable();toast('Face ID unlock turned off');go('settings',{keepScroll:true});return;}
+  e.target.checked=false;if(!(await AHVBio.platformOK())){toast('Face ID / Touch ID passkeys are not available on this device or browser');return;}
+  let pin=null;window.__wantPin=true;await Lock.unlock(true);window.__wantPin=false;pin=window.__lastPin;window.__lastPin=null;if(!pin){return;}
+  const r=await AHVBio.enroll(pin,(S.profile||{}).name);if(r.ok){toast(r.mode==='passkey-noprf'?'Face ID registered — passcode still needed for records':'Face ID unlock is on');if(r.reason)alert(r.reason);}else toast(r.reason||'Face ID not enabled');go('settings',{keepScroll:true});};
  $('#s-pin').onclick=async()=>{if(await Lock.unlock(true)){if(await Lock.setPin(true))toast('Passcode changed');}};
  $('#s-auto').onchange=e=>localStorage.setItem('ahv_autolock',e.target.checked?'1':'0');
  $('#s-lock').onclick=lockNow;

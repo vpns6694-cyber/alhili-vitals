@@ -1,10 +1,13 @@
 /*! Al Hili Vitals 3.4 — reminders: local notifications + chime. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
 (function(){'use strict';const A=window.AHV,SH=window.AHVShift;const $=A.$,$$=A.$$,esc=A.esc;
 let list=null,last=null,timer=null;A.remLog=[];
-const load=async()=>list||(list=(await A.DB.kget('reminders'))||[]);
+/* 3.5: built-in shift alerts (at start + 10 min before end) are seeded once; nurses can switch them off */
+const SEED=[{id:'sa-start',label:'Shift starting',type:'beforeStart',minutes:0,on:true,builtin:true},{id:'sa-end10',label:'Shift ends in 10 minutes',type:'beforeEnd',minutes:10,on:true,builtin:true}];
+const load=async()=>{if(list)return list;list=await A.DB.kget('reminders');if(!list){list=SEED.map(r=>({...r}));await A.DB.kset('reminders',list);}else if(!list.some(r=>r.builtin)&&!(await A.DB.kget('shiftAlertsSeeded'))){list.unshift(...SEED.map(r=>({...r})));await A.DB.kset('reminders',list);}await A.DB.kset('shiftAlertsSeeded',1);return list;};
 const save=async()=>{await A.DB.kset('reminders',list);A.rescheduleReminders();};
 const native=()=>window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.LocalNotifications;
-const describe=r=>r.type==='time'?`Every day at ${r.time}`:`${r.minutes} min before shift ${r.type==='beforeStart'?'start':'end'}`;
+const describe=r=>r.type==='time'?`Every day at ${r.time}`:+r.minutes===0?`At shift ${r.type==='beforeStart'?'start':'end'}`:`${r.minutes} min before shift ${r.type==='beforeStart'?'start':'end'}`;
+const occBody=(r,o)=>r.type==='time'?`Reminder · ${r.time}`:+r.minutes===0?`${o.shift} shift ${r.type==='beforeStart'?'starts now':'ends now'}`:`${o.shift} shift ${r.type==='beforeStart'?'starts':'ends'} in ${r.minutes} min`;
 A.remCount=async()=>(await load()).filter(r=>r.on).length;
 A.remSummary=async()=>{const l=await load();const n=l.filter(r=>r.on).length;return n?`${n} active`:'None set';};
 /* sound: soft two-tone clinic chime via WebAudio */
@@ -14,11 +17,12 @@ A.chime=function(){try{unlock();if(!ac)return false;const t=ac.currentTime;[[880
  g.gain.setValueAtTime(0,t+d);g.gain.linearRampToValueAtTime(.28,t+d+.02);g.gain.exponentialRampToValueAtTime(.001,t+d+1.1);o.connect(g).connect(ac.destination);o.start(t+d);o.stop(t+d+1.2);});return true;}catch(e){return false;}};
 function banner(title,body){const b=document.createElement('div');b.className='banner glass3';b.innerHTML=`<img src="${A.LOGO}" alt=""><div><b>${esc(title)}</b><span>${esc(body)}</span></div>`;document.body.appendChild(b);
  requestAnimationFrame(()=>b.classList.add('on'));b.onclick=()=>b.remove();setTimeout(()=>{b.classList.remove('on');setTimeout(()=>b.remove(),400);},6000);}
-async function fire(r,occ){const title=r.label||'Al Hili Vitals';const body=r.type==='time'?`Reminder · ${r.time}`:`${occ.shift} shift ${r.type==='beforeStart'?'starts':'ends'} in ${r.minutes} min`;
+async function fire(r,occ){const title=r.label||'Al Hili Vitals';const body=occBody(r,occ);
  A.remLog.push({id:r.id,at:occ.at.toISOString(),title,body});
  try{if('Notification' in window&&Notification.permission==='granted'){const reg=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration();
   if(reg&&reg.showNotification)await reg.showNotification(title,{body,icon:'icons/icon-192.png',tag:r.id+occ.at.getTime()});else new Notification(title,{body,icon:'icons/icon-192.png'});}}catch(e){}
- A.chime();A.haptic('success');banner(title,body);}
+ A.chime();A.haptic('success');try{navigator.vibrate&&navigator.vibrate([220,120,220,120,320]);}catch(e){}banner(title,body);}
+A.fireReminder=fire;
 function check(){if(!list)return;const now=new Date();if(!last){last=now;return;}if(now<last){last=now;return;}
  const span=(now-last)/3600e3+0.001;
  list.filter(r=>r.on).forEach(r=>SH.reminderTimes(r,last,A.S.roster||{},A.S.codes,Math.max(span,0.01)).forEach(o=>{if(o.at>last&&o.at<=now)fire(r,o);}));last=now;}
@@ -27,7 +31,7 @@ A.startReminders=async()=>{await load();last=new Date();clearInterval(timer);tim
 A.rescheduleReminders=async()=>{const LN=native();if(!LN||!list)return;try{
  const pend=await LN.getPending();if(pend.notifications.length)await LN.cancel({notifications:pend.notifications.map(n=>({id:n.id}))});
  const now=new Date(),out=[];let id=1;list.filter(r=>r.on).forEach(r=>SH.reminderTimes(r,now,A.S.roster||{},A.S.codes,24*7).forEach(o=>{if(out.length<60)out.push({id:id++,title:r.label||'Al Hili Vitals',
-  body:r.type==='time'?`Reminder · ${r.time}`:`${o.shift} shift ${r.type==='beforeStart'?'starts':'ends'} in ${r.minutes} min`,schedule:{at:o.at,allowWhileIdle:true},sound:'default'});}));
+  body:occBody(r,o),schedule:{at:o.at,allowWhileIdle:true},sound:'default'});}));
  if(out.length)await LN.schedule({notifications:out});}catch(e){console.warn(e);}};
 async function askPermission(){const LN=native();if(LN){const p=await LN.requestPermissions();return p.display==='granted';}
  if(!('Notification' in window))return false;if(Notification.permission==='granted')return true;try{return (await Notification.requestPermission())==='granted';}catch(e){return false;}}

@@ -71,12 +71,26 @@ async function fromPDF(f){await needPDF();const doc=await pdfjsLib.getDocument({
  return SH.parseRows(rows,A.S.codes);}
 /* photo → OCR (works offline in PWA, iOS and the single-file HTML) → grid cells → parsed roster */
 async function fromImage(f,onProg){const O=window.AHVOCR;if(!O)throw new Error('OCR engine not loaded.');
+ /* 3.5: colour-grid reader (Excel screenshots, colour-coded or ruled printed rosters, photos with tilt/perspective/low light) */
+ if(window.AHVRosterShot){try{const g=await AHVRosterShot.read(f,pr=>onProg&&onProg(pr*0.98),{codes:A.S.codes});A.lastShot=g;
+  if(g.ok&&g.matrix.length>1){const legCodes=g.legend.map(l=>({code:l.code,name:l.name||'',type:l.type==='work'?'work':l.type||'leave',start:l.start,end:l.end}));
+   const all=[...A.S.codes,...legCodes.filter(l=>!A.S.codes.some(c=>c.code===l.code))];const used=new Set(g.matrix.slice(1).flatMap(r=>r.slice(2)).filter(Boolean));
+   used.forEach(u=>{if(!all.some(c=>c.code===u)&&/^[A-Z][A-Z0-9]{0,4}$/.test(u))all.push({code:u,name:'',type:'work'});});
+   const p=SH.parseRows(g.matrix,all,{aligned:true});p.legend=g.legend;p.month=p.month||guessMonth(f,g);
+   p.rows.forEach((r,i)=>{r.guess={};(g.cells[i]||[]).forEach((c,j)=>{if(c.guess&&c.code)r.guess[j+1]=c.t||'(unreadable)';});});
+   p.ocr={grid:true,rowLines:g.info.dataRows+1,colLines:g.info.dayCols+1,rectified:g.info.rectified,angle:g.info.angle,colourGrid:true,fixedByColour:g.info.fixedByColour,legend:g.legend.length};
+   p.rawText=g.text;p.usedCodes=[...used];
+   try{const cv=g.canvas,b=g.boundaries;if(cv&&b&&b.rows&&b.rows.length){const kd=(g.info.kinds||[]);const li=kd.lastIndexOf('data');const y0=Math.round(b.rows[Math.min(b.rows.length-1,li+1)]+3);if(cv.height-y0>30){const sc=Math.min(2,2400/cv.width),k=document.createElement('canvas');k.width=Math.round(cv.width*sc);k.height=Math.round((cv.height-y0)*sc);const kg=k.getContext('2d');kg.imageSmoothingQuality='high';kg.drawImage(cv,0,y0,cv.width,cv.height-y0,0,0,k.width,k.height);
+     const o=await O.recognizeCanvas(k,{tessedit_char_whitelist:'',tessedit_pageseg_mode:'6'});const bt=(o&&(o.text||o.data&&o.data.text))||'';if(bt.trim())g.text=(g.text||'')+'\n'+bt;}}}catch(e){console.warn('notes OCR',e);}
+   try{const tp=SH.parseRows(SH.textToRows(g.text||''),A.S.codes,{ocr:true});if(tp.notes&&tp.notes.length&&!(p.notes&&p.notes.length))p.notes=tp.notes;(tp.legend||[]).forEach(l=>{if(!p.legend.some(x=>x.code===l.code))p.legend.push(l);});}catch(e){}
+   if(p.rows.length)return p;}}catch(e){console.warn('colour grid reader',e);}}
  const chars=[...new Set(A.S.codes.map(c=>c.code).join('').toUpperCase())].join('')+'0123456789';
  const r=await O.readTable(f,onProg,{chars,accept:t=>!!(SH.fuzzyCode(t,A.S.codes,true)||(SH.codeByTime(t,A.S.codes)||{}).code)});A.lastOCR=r.text;A.lastOCRInfo={retried:r.retried,fixed:r.fixed,grid:r.grid,rectified:r.rectified,angle:r.angle,rowLines:r.rowLines,colLines:r.colLines,words:r.words.length};
  let p=r.matrix?SH.parseRows(r.matrix,A.S.codes,{aligned:true,ocr:true,extra:r.extra}):null;
  if(!p||!p.rows.length){const q=SH.parseRows(r.rows||SH.textToRows(r.text),A.S.codes,{extra:r.extra});if(!p||q.rows.length>p.rows.length)p=q;}
  if(!p.rows.length){const q=SH.parseRows(SH.textToRows(r.text),A.S.codes);if(q.rows.length)p=q;}
- p.ocr=A.lastOCRInfo;return p;}
+ p.ocr=A.lastOCRInfo;p.rawText=r.text;return p;}
+function guessMonth(f,g){const t=((f&&f.name)||'')+' '+(g&&g.text||'');const MN=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];const m=t.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?[\s,\-_]*(\d{4})/i);return m?m[2]+'-'+A.pad2(MN.indexOf(m[1].toLowerCase().slice(0,3))+1):null;}
 A.importFile=async function(f,onProg){const n=(f.name||'').toLowerCase(),t=f.type||'';
  if(/\.(txt|tsv)$/.test(n)||t==='text/plain'||t==='text/tab-separated-values'){const tx=await f.text();return SH.parseRows(SH.textToRows(tx),A.S.codes);}
  if(/\.(xlsx|xls|csv|ods)$/.test(n)||/sheet|excel|csv/.test(t))return fromSheet(f);
@@ -91,7 +105,7 @@ A.openImport=function(){const close=sheet('Import Duty Roster',`<div class="stam
  <div class="lbl">Or paste roster text</div><textarea id="im-txt" class="ta" placeholder="Name  ID  1  2  3 …&#10;Mariam  N-20417  M1  M1  DO  N …"></textarea><button class="btn block" id="im-go">Parse text</button>
  <div id="im-st" class="impstatus"></div>`);
  const run=async(job,label,src)=>{const st=$('#im-st');st.innerHTML=`<div class="spin"></div><span id="im-pt">${label}…</span>`;
-  try{const p=await job(pr=>{const e=$('#im-pt');if(e)e.textContent=`${label}… ${Math.round(pr*100)}%`;});if(!p||!p.rows.length)throw new Error('No roster rows with shift codes were found. Try a clearer photo (flat, bright, whole table in view), or paste the text.');p.source=src||'Pasted text';review(p);}
+  try{const p=await job(pr=>{const e=$('#im-pt');if(e)e.textContent=`${label}… ${Math.round(pr*100)}%`;});if(!p||!p.rows.length){rawView((p&&p.rawText)||(A.lastShot&&A.lastShot.text)||A.lastOCR||'',src);return;}p.source=src||'Pasted text';review(p);}
   catch(e){st.innerHTML=`<span class="err">${esc(e.message||e)}</span>`;A.haptic('error');}};
  ['im-cam','im-img','im-pdf','im-xls'].forEach(id=>$('#'+id).onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)run(pr=>A.importFile(f,pr),/image/.test(f.type)?'Reading photo (on-device OCR)':'Reading file',f.name||'Photo');});
  $('#im-go').onclick=()=>{const t=$('#im-txt').value;if(!t.trim())return;run(async()=>SH.parseRows(SH.textToRows(t),A.S.codes),'Parsing','Pasted text');};};
@@ -99,16 +113,21 @@ function ico(k){const P={cam:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12
  return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${P[k]}</svg>`;}
 /* ---------------- review / confirm: EVERYTHING extracted, editable before saving ---------------- */
 const isCode=v=>!!look(v);
-function review(p){const month0=p.month||A.S.month;const mi=Math.max(0,SH.matchRow(p.rows,A.S.profile));const auto=SH.matchRow(p.rows,A.S.profile)>=0;
+function review(p){const month0=p.month||A.S.month;const mi=Math.max(0,SH.matchRow(p.rows,A.S.profile));const auto=SH.matchRow(p.rows,A.S.profile)>=0;A.lastReview={p,mi,auto};
  const allDays=new Set();p.rows.forEach(r=>{Object.keys(r.days).forEach(d=>allDays.add(+d));Object.keys(r.unknown||{}).forEach(d=>allDays.add(+d));});
  const unk=p.rows.reduce((a,r)=>a+Object.keys(r.unknown||{}).length+Object.keys(r.guess||{}).length,0);
+ const legSet=new Set((p.legend||[]).map(l=>l.code));const usedAll=new Set(p.rows.flatMap(r=>Object.values({...r.days,...(r.unknown||{})})).map(v=>String(v).toUpperCase()).filter(v=>/^[A-Z][A-Z0-9]{0,4}$/.test(v)));
+ const sug=c=>/^N\d*$/.test(c)?{name:'Night',type:'work',start:'21:00',end:'07:00'}:/^(AL|SL|TL|ML|EL|CL)$/.test(c)?{name:{AL:'Annual Leave',SL:'Sick Leave',TL:'Training Leave',ML:'Maternity Leave',EL:'Emergency Leave',CL:'Compassionate Leave'}[c],type:'leave'}:/^(DO|OFF|PH)$/.test(c)?{name:'Day Off',type:'off'}:/^M\d*$/.test(c)?{name:'Morning',type:'work',start:'07:00',end:'15:00'}:/^E\d*$/.test(c)?{name:'Evening',type:'work',start:'14:00',end:'22:00'}:/^S\d*$/.test(c)?{name:'Day',type:'work',start:'08:00',end:'16:00'}:{name:'',type:'other'};
+ const codesUsed=[...usedAll].filter(c=>!legSet.has(c)).sort().map(c=>{const ex=look(c);return ex?{...ex,saved:true}:{code:c,...sug(c),saved:false};});
  const close=sheet('Review Import',`<div class="stamp" style="margin:0 0 10px">${esc(p.source||'')} · <b>${p.rows.length}</b> row(s) · <b>${allDays.size}</b> day column(s)${unk?` · <b class="warnc">${unk}</b> cell(s) need checking`:''}${p.ocr?` · OCR ${p.ocr.rectified?'perspective-corrected':p.ocr.angle?'deskewed '+p.ocr.angle+'°':'straight'}, ${p.ocr.grid?'grid '+(p.ocr.rowLines-1)+'×'+(p.ocr.colLines-1):'no grid lines'}`:''}</div>
  <div class="lbl">Roster month</div><div class="big"><input type="month" id="rv-m" value="${month0}"></div>
  <div class="lbl">All extracted data <span class="small">(tap a cell to correct · ● marks your row)</span></div>
  <div class="rvwrap" id="rv-wrap"><table class="rvtable" id="rv-t"></table></div>
  <datalist id="rv-codes">${A.S.codes.map(c=>`<option value="${esc(c.code)}">${esc(c.name)}</option>`).join('')}</datalist>
  <div class="lbl">Your row — every day</div><div class="group rvdetail" id="rv-detail"></div>
- ${p.legend&&p.legend.length?`<div class="lbl">Shift times found in the roster</div><div class="group">${p.legend.map((l,i)=>{const ex=look(l.code);return `<label class="cell rvleg"><input type="checkbox" data-l="${i}" ${!ex||ex.start!==l.start||ex.end!==l.end?'checked':''}><span class="codechip ${typeCls(ex)}">${esc(l.code)}</span><div class="grow">${esc(l.name||(ex&&ex.name)||'Shift')}<div class="s">${l.start} – ${l.end}${ex?(ex.start===l.start&&ex.end===l.end?' · same as saved':' · saved: '+(ex.start?ex.start+' – '+ex.end:'no times')):' · new code'}</div></div></label>`;}).join('')}</div>`:''}
+ ${p.legend&&p.legend.length?`<div class="lbl">Shift times found in the roster</div><div class="group">${p.legend.map((l,i)=>{const ex=look(l.code);return `<label class="cell rvleg"><input type="checkbox" data-l="${i}" ${!ex||ex.start!==l.start||ex.end!==l.end?'checked':''}><span class="codechip ${typeCls(ex)}">${esc(l.code)}</span><div class="grow">${esc(l.name||(ex&&ex.name)||'Shift')}<div class="s">${l.start?l.start+' – '+l.end:esc(l.type==='off'?'Day off':'Leave / no times')}${ex?(ex.start===l.start&&ex.end===l.end?' · same as saved':' · saved: '+(ex.start?ex.start+' – '+ex.end:'no times')):' · new code'}</div></div></label>`;}).join('')}</div>`:''}
+ ${codesUsed.length?`<div class="lbl">Codes in this roster without times in its legend <span class="small">(check the times — they drive countdowns and reminders)</span></div><div class="group" id="rv-cu">${codesUsed.map((c,i)=>`<div class="cell rvcu" data-c="${esc(c.code)}"><span class="codechip ${typeCls(c)}">${esc(c.code)}</span><div class="grow"><input class="rv-cn" value="${esc(c.name||'')}" placeholder="Name, e.g. Morning" aria-label="${esc(c.code)} name"><div class="rvcut"><select class="rv-ct" aria-label="${esc(c.code)} type">${['work','off','leave','duty','other'].map(t=>`<option ${t===c.type?'selected':''}>${t}</option>`).join('')}</select><input type="time" class="rv-cs" value="${c.start||''}" aria-label="${esc(c.code)} start"><span>–</span><input type="time" class="rv-ce" value="${c.end||''}" aria-label="${esc(c.code)} end"></div><div class="s">${c.saved?'Saved times — confirm':'<span class="warnc">New code · suggested '+(c.start?c.start+'–'+c.end:'no times')+'</span>'}</div></div></div>`).join('')}</div>`:''}
+ ${p.rawText?'<button class="btn block" id="rv-raw">Show what OCR read (raw text + manual columns)</button>':''}
  <div class="lbl">Notes &amp; other text found</div><textarea id="rv-notes" class="ta" placeholder="No other text">${esc((p.notes||[]).join('\n'))}</textarea>
  <div class="hint" id="rv-h"></div>
  <button class="btn p block" id="rv-save">Save roster</button>`,{right:'<button class="txtbtn r" id="rv-save2">Save</button>'});
@@ -131,16 +150,33 @@ function review(p){const month0=p.month||A.S.month;const mi=Math.max(0,SH.matchR
   const bad=[];for(let d=1;d<=n;d++){const v=(r.cells[d]||'').trim().toUpperCase();if(v&&!/^[A-Z0-9]{1,5}$/.test(v))bad.push(d);}
   if(bad.length){h.textContent='Fix day(s) '+bad.join(', ')+' in your row: use a shift code (1–5 letters/numbers) or leave empty.';A.haptic('error');return;}
   // shift times found in the roster legend
-  $$('.rvleg input:checked').forEach(cb=>{const l=p.legend[+cb.dataset.l];const i=A.S.codes.findIndex(c=>c.code===l.code);const nc={code:l.code,name:l.name||(i>=0?A.S.codes[i].name:'Shift '+l.code),type:'work',start:l.start,end:l.end};if(i>=0)A.S.codes[i]={...A.S.codes[i],...nc,type:A.S.codes[i].type==='work'||A.S.codes[i].type==='duty'?A.S.codes[i].type:'work'};else A.S.codes.push(nc);});
-  if($$('.rvleg input:checked').length)await saveCodes();
+  $$('.rvleg input:checked').forEach(cb=>{const l=p.legend[+cb.dataset.l];const i=A.S.codes.findIndex(c=>c.code===l.code);const nc={code:l.code,name:l.name||(i>=0?A.S.codes[i].name:'Shift '+l.code),type:l.start?'work':(l.type==='off'?'off':'leave'),start:l.start,end:l.end};if(!l.start){delete nc.start;delete nc.end;}if(i>=0)A.S.codes[i]={...A.S.codes[i],...nc,type:A.S.codes[i].type==='work'||A.S.codes[i].type==='duty'?A.S.codes[i].type:'work'};else A.S.codes.push(nc);});
+  $$('#rv-cu .rvcu').forEach(el=>{const code=el.dataset.c,nc={code,name:$('.rv-cn',el).value.trim()||code,type:$('.rv-ct',el).value};const st=$('.rv-cs',el).value,en=$('.rv-ce',el).value;if(st&&en&&nc.type!=='off'&&nc.type!=='leave'){nc.start=st;nc.end=en;}
+   const i=A.S.codes.findIndex(c=>c.code===code);if(i>=0)A.S.codes[i]={...A.S.codes[i],...nc,...(nc.start?{}:{start:undefined,end:undefined})};else A.S.codes.push(nc);});
+  if($$('.rvleg input:checked').length||$$('#rv-cu .rvcu').length)await saveCodes();
   Object.keys(A.S.roster).filter(k=>k.startsWith(m)).forEach(k=>delete A.S.roster[k]);
   for(let d=1;d<=n;d++){const v=(r.cells[d]||'').trim().toUpperCase();if(v)A.S.roster[m+'-'+A.pad2(d)]=v;}
   const team={month:m,source:p.source||'',imported:Date.now(),me,notes:$('#rv-notes').value.trim(),rows:rows.map(x=>({name:x.name.trim(),id:x.id.trim(),days:Object.fromEntries(Object.entries(x.cells).filter(([d,v])=>v&&+d<=n).map(([d,v])=>[d,String(v).trim().toUpperCase()]))}))};
   await A.DB.kset('rosterTeam',team);A.S.team=team;A.S.month=m;await saveRoster({source:r.name,imported:Date.now()});
   const unknown=Object.values(A.S.roster).filter((v,i,a)=>!isCode(v)&&a.indexOf(v)===i);
   A.haptic('success');close();A.toast(unknown.length?`Roster saved · unknown code(s): ${unknown.join(', ')} — add them in Shift codes`:'Roster saved');A.go('profile');};
- $('#rv-save').onclick=save;$('#rv-save2').onclick=save;}
+ $('#rv-save').onclick=save;$('#rv-save2').onclick=save;const rw=$('#rv-raw');if(rw)rw.onclick=()=>rawView(p.rawText,p.source);}
 A.review=review;
+/* raw OCR view: everything that was read, editable, with a manual column/row picker — used instead of an error */
+function rawView(text,src){const close=sheet('What the photo shows',`<div class="stamp" style="margin:0 0 10px">No roster table was recognised automatically, so here is everything OCR read. Fix the text if needed, then tell the app which columns hold the name, ID and days.</div>
+ <textarea id="rw-t" class="ta rwta" spellcheck="false">${esc(text)}</textarea><div class="rwpick" id="rw-p"></div><div class="hint" id="rw-h"></div>
+ <div class="btnrow"><button class="btn" id="rw-re">Re-split text</button><button class="btn p" id="rw-go">Use these columns</button></div>`);
+ const draw=()=>{const rows=SH.textToRows($('#rw-t').value.replace(/\t/g,'  ')).slice(0,60);const nc=Math.max(1,...rows.map(r=>r.length));const opt=(sel,def)=>`<select id="${sel}">${[...Array(nc)].map((_,i)=>`<option value="${i}" ${i===def?'selected':''}>Column ${i+1}</option>`).join('')}</select>`;
+  const dCol=rows.length?rows[Math.min(1,rows.length-1)].findIndex(c=>SH.fuzzyCode(c,A.S.codes,true)):2;
+  $('#rw-p').innerHTML=`<div class="rwgrid"><label>Name column ${opt('rw-n',1)}</label><label>ID column <select id="rw-i"><option value="-1">None</option>${[...Array(nc)].map((_,i)=>`<option value="${i}" ${i===0?'selected':''}>Column ${i+1}</option>`).join('')}</select></label>
+   <label>First day column ${opt('rw-d',Math.max(0,dCol))}</label><label>Day 1 is <input id="rw-d1" type="number" min="1" max="31" value="1"></label><label>Skip top rows <input id="rw-s" type="number" min="0" max="50" value="0"></label></div>
+   <div class="rvwrap"><table class="rvtable ro"><tbody>${rows.slice(0,25).map((r,i)=>`<tr><th>${i+1}</th>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;};
+ draw();$('#rw-re').onclick=draw;
+ $('#rw-go').onclick=()=>{const rows=SH.textToRows($('#rw-t').value.replace(/\t/g,'  '));const n=+$('#rw-n').value,id=+$('#rw-i').value,d=+$('#rw-d').value,d1=+$('#rw-d1').value||1,sk=+$('#rw-s').value||0;
+  const body=rows.slice(sk).filter(r=>r.length>d);const nd=Math.max(...body.map(r=>r.length-d));const M=[['ID','Name',...[...Array(nd)].map((_,i)=>String(d1+i))],...body.map(r=>[id>=0?r[id]||'':'',(n<d?r.slice(n,d).filter((_,k)=>n+k!==id).join(' '):r[n])||'',...r.slice(d)])];
+  const p=SH.parseRows(M,A.S.codes,{aligned:true,ocr:true});if(!p.rows.length){$('#rw-h').textContent='Still no rows with shift codes — check the first day column.';A.haptic('error');return;}
+  p.source=(src||'Photo')+' (manual columns)';p.rawText=$('#rw-t').value;close();review(p);};}
+A.rawView=rawView;
 /* full team roster (everything that was imported) */
 A.openTeam=function(){const t=A.S.team;if(!t)return;const n=daysIn(t.month);const days=[...Array(n)].map((_,i)=>i+1);
  sheet('Full Roster',`<div class="stamp" style="margin:0 0 10px">${monthName(t.month)} · ${t.rows.length} nurse(s) · imported ${new Date(t.imported).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}${t.source?' from '+esc(t.source):''}</div>

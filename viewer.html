@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B3C5D"><meta name="robots" content="noindex">
+<title>Al Hili Vitals · Document viewer</title>
+<link rel="icon" href="icons/icon-192.png">
+<!-- Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae -->
+<style>
+:root{--tq:#37AFC8;--navy:#0B3C5D;--ink:#0F2233}
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;color:#fff;background:#06263b}
+#bg{position:fixed;inset:0;z-index:0;overflow:hidden;background:radial-gradient(120% 90% at 20% 0%,#0f5a78 0%,#0a3550 45%,#061f33 100%)}
+#bg i{position:absolute;border-radius:50%;filter:blur(60px);opacity:.45;animation:fl 22s ease-in-out infinite alternate}
+#bg i:nth-child(1){width:60vmax;height:60vmax;left:-20vmax;top:-15vmax;background:#37AFC8}
+#bg i:nth-child(2){width:50vmax;height:50vmax;right:-18vmax;bottom:-20vmax;background:#1d7fa0;animation-duration:28s}
+#bg i:nth-child(3){width:30vmax;height:30vmax;left:40%;top:45%;background:#7fd9ea;opacity:.18;animation-duration:34s}
+@keyframes fl{to{transform:translate(6vmax,4vmax) scale(1.08)}}
+@media (prefers-reduced-motion:reduce){#bg i{animation:none}}
+main{position:relative;z-index:1;min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px 16px calc(24px + env(safe-area-inset-bottom))}
+.glass{width:100%;max-width:440px;border-radius:28px;padding:26px 22px 22px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);box-shadow:0 20px 60px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.35);backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%)}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:14px}.brand img{height:52px;width:auto;background:#fff;border-radius:12px;padding:4px 8px}
+.brand b{display:block;font-size:17px}.brand span{font-size:13px;color:#d5eef5}
+h1{font-size:22px;margin:6px 0 6px}p{margin:6px 0;font-size:15px;line-height:1.45;color:#e6f5f9}.small{font-size:13px;color:#cfe9f0}
+.cam{position:relative;width:260px;height:150px;margin:18px auto 8px}
+.cam .half{position:absolute;inset:0;border-radius:130px 130px 0 0;overflow:hidden;background:#0a2f45;border:3px solid rgba(255,255,255,.35);border-bottom:0}
+.cam video,.cam canvas.snap{position:absolute;left:0;top:0;width:260px;height:195px;object-fit:cover;transform:scaleX(-1)}
+.cam svg{position:absolute;left:-10px;top:-10px;width:280px;height:160px;overflow:visible}
+.cam .arc{fill:none;stroke:var(--tq);stroke-width:6;stroke-linecap:round;stroke-dasharray:440;stroke-dashoffset:440;transition:stroke-dashoffset .9s ease,opacity .6s}
+.cam.found .arc{stroke-dashoffset:0}
+.badge{position:absolute;left:50%;bottom:-16px;transform:translateX(-50%) scale(.8);opacity:0;background:var(--tq);color:#06263b;font-weight:800;font-size:14px;padding:7px 14px;border-radius:999px;white-space:nowrap;box-shadow:0 6px 18px rgba(55,175,200,.5);transition:all .5s}
+.cam.found .badge{opacity:1;transform:translateX(-50%) scale(1)}.cam.fade{opacity:0;transition:opacity .8s .9s}
+.status{text-align:center;min-height:22px;margin-top:22px;font-size:14px;color:#e6f5f9}
+.note{margin-top:12px;font-size:12.5px;color:#cfe9f0;background:rgba(0,0,0,.18);border-radius:12px;padding:9px 11px;line-height:1.4}
+button{font:inherit}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 18px;border-radius:14px;border:0;background:#fff;color:var(--navy);font-weight:700;font-size:16px;cursor:pointer}
+.btn.p{background:var(--tq);color:#06263b}.btn.g{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.3)}
+.row{display:flex;gap:10px;margin-top:14px}.row .btn{flex:1}
+.link{background:none;border:0;color:#d5eef5;text-decoration:underline;font-size:14px;margin-top:10px;cursor:pointer;padding:6px}
+.pin{display:flex;flex-direction:column;gap:12px;margin-top:10px}
+.pin input{height:56px;border-radius:16px;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.16);color:#fff;font-size:22px;letter-spacing:2px;text-align:center;outline:none}
+.pin input:focus{border-color:var(--tq);box-shadow:0 0 0 3px rgba(55,175,200,.35)}.pin input::placeholder{color:#cfe9f0;letter-spacing:0;font-size:16px}
+.err{color:#ffd0d0;font-weight:600;min-height:20px;font-size:14px}
+.doc{max-width:860px}.pages img{width:100%;display:block;border-radius:10px;margin-top:12px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.meta div{background:rgba(255,255,255,.1);border-radius:12px;padding:8px 10px;font-size:13px}.meta b{display:block;font-size:15px}
+.parts{display:flex;gap:6px;justify-content:center;margin:14px 0}.parts i{width:34px;height:8px;border-radius:4px;background:rgba(255,255,255,.25)}.parts i.on{background:var(--tq)}
+.log{margin-top:10px;max-height:240px;overflow:auto}.log div{display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,.15);font-size:13px}.log img{width:40px;height:40px;border-radius:50%;object-fit:cover;background:#0a2f45}
+.foot{margin-top:16px;font-size:11.5px;color:#bfe3ec;text-align:center}
+.hidden{display:none!important}
+@media print{body *{visibility:hidden}}
+</style></head>
+<body><div id="bg"><i></i><i></i><i></i></div>
+<main><div class="glass" id="card">
+ <div class="brand"><img src="icons/logo-900.png" alt="Al Hili Clinic"><div><b>Al Hili Clinic</b><span>School vitals · encrypted document</span></div></div>
+ <div id="step"></div>
+ <div class="foot">Copyright (c) 2026 Abdalla Abbadi. All rights reserved.</div>
+</div></main>
+<script src="vendor/qrcode/qrcode.js"></script><script src="js/docqr.js"></script><script src="js/schools-data.js"></script><script src="js/schoolform.js"></script><script src="js/viewer.js"></script>
+</body></html>
