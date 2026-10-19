@@ -15,7 +15,12 @@ const MODES=[
  {id:'bsa',s:'BSA',t:'BSA',d:'Mosteller (paediatric/adult)',f:[['height','Height','cm','decimal'],['weight','Weight','kg','decimal']],
   run:v=>{const r=C.bsaMosteller(v);return{main:[['Body surface area',r.bsa,'m²']],formula:r.formula};}},
  {id:'crcl',s:'CrCl',t:'CrCl',d:'Cockcroft-Gault',f:[['age','Age','years','numeric'],['weight','Weight','kg','decimal'],['scr','Serum creatinine','','decimal']],sel:[['female','Sex',[['false','Male'],['true','Female']],'false'],['unit','Creatinine unit',[['mg/dL','mg/dL'],['umol/L','µmol/L']],'mg/dL']],
-  run:v=>{const r=C.crcl({...v,female:v.female==='true'});return{main:[['Creatinine clearance',r.crcl,'mL/min']],note:'Uses actual body weight. Not validated for unstable renal function, pregnancy or under-18s.',formula:r.formula};}}];
+  run:v=>{const r=C.crcl({...v,female:v.female==='true'});return{main:[['Creatinine clearance',r.crcl,'mL/min']],note:'Uses actual body weight. Not validated for unstable renal function, pregnancy or under-18s.',formula:r.formula};}},
+ {id:'mmol',s:'mmol',t:'mg ↔ mmol',d:'Lab units: mg/dL ↔ mmol/L (glucose ×18.016)',f:[['value','Value','','decimal']],sel:[['an','Analyte',[['glu','Glucose'],['chol','Cholesterol'],['tg','Triglycerides'],['bun','Urea (BUN)'],['ca','Calcium'],['mg','Magnesium'],['phos','Phosphate'],['crea','Creatinine (µmol/L)'],['ua','Uric acid (µmol/L)']],'glu'],['dir','Direction',[['to','mg/dL → mmol/L'],['from','mmol/L → mg/dL']],'to']],
+  run:v=>{const F={glu:18.016,chol:38.67,tg:88.57,bun:2.801,ca:4.008,mg:2.431,phos:3.097,crea:1/88.4,ua:1/59.48};const f=F[v.an],x=+v.value;if(!(x>0))throw new C.CalcError('value','Enter a value');const um=/crea|ua/.test(v.an)?'µmol/L':'mmol/L';
+   const r=v.dir==='to'?x/f:x*f;const out=Math.round(r*(r<10?100:10))/(r<10?100:10);return{main:[['Result',out,v.dir==='to'?um:'mg/dL']],formula:v.dir==='to'?`${x} mg/dL ${f>=1?'÷ '+f:'× '+Math.round(1/f*100)/100} = ${out} ${um}`:`${x} ${um} ${f>=1?'× '+f:'÷ '+Math.round(1/f*100)/100} = ${out} mg/dL`};}},
+ {id:'mw',s:'mg→mmol',t:'mg → mmol',d:'Any substance: mmol = mg ÷ molar mass',f:[['mg','Amount','mg','decimal'],['mw','Molar mass','g/mol','decimal']],
+  run:v=>{const a=+v.mg,m=+v.mw;if(!(a>0&&m>0))throw new C.CalcError('mg','Enter amount and molar mass');const r=Math.round(a/m*1000)/1000;return{main:[['Amount',r,'mmol']],formula:`${a} mg ÷ ${m} g/mol = ${r} mmol`};}}];
 let mode='wt';const vals={};
 A.R.calc=function(){const m=MODES.find(x=>x.id===mode);const v=vals[mode]=vals[mode]||{};
  m.f.forEach(([k,,,,def])=>{if(v[k]===undefined&&def!==undefined)v[k]=def;});(m.sel||[]).forEach(([k,,,def])=>{if(v[k]===undefined)v[k]=def;});

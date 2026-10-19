@@ -1,6 +1,10 @@
 /*! Al Hili Vitals 3.5 — Home dashboard with current shift + countdown ring. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
 (function(){'use strict';const A=window.AHV;const SH=window.AHVShift;
 const fmtHM=d=>A.pad2(d.getHours())+':'+A.pad2(d.getMinutes());
+const hmHTML=d=>`<span class="ch">${A.pad2(d.getHours())}</span><span class="colon">:</span><span class="cm">${A.pad2(d.getMinutes())}</span>`;
+/* 3.6: countdown shown as hours + minutes (no seconds), each part its own colour, fixed-width tabular digits */
+const cdHTML=ms=>{ms=Math.max(0,ms);const m=Math.ceil(ms/60000),h=Math.floor(m/60),mm=m%60;return `<span class="cdh">${A.pad2(h)}</span><span class="cdu">h</span><span class="cdm">${A.pad2(mm)}</span><span class="cdu">m</span>`;};
+A.cdHTML=cdHTML;
 const fmtDur=ms=>{ms=Math.max(0,ms);const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return(h?A.pad2(h)+':':'')+A.pad2(m)+':'+A.pad2(x);};
 const dayLbl=k=>{const d=new Date(k+'T12:00');const t=new Date();t.setHours(12,0,0,0);const diff=Math.round((d-t)/864e5);return diff===0?'Today':diff===1?'Tomorrow':d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});};
 A.shiftNow=(now)=>SH.current(now||new Date(),A.S.roster||{},A.S.codes||SH.DEFAULT_CODES);
@@ -8,8 +12,8 @@ function ring(p){const r=84,c=2*Math.PI*r;return `<svg class="ring" viewBox="0 0
  <circle cx="100" cy="100" r="${r}" class="trk"/><circle cx="100" cy="100" r="${r}" class="bar" id="ringbar" stroke-dasharray="${c}" stroke-dashoffset="${c*(1-p)}"/></svg>`;}
 function shiftCard(c){const code=s=>`<span class="codebig">${A.esc(s.code)}</span>`;
  const nx=c.next?`<div class="nextline">Next · <b>${A.esc(c.next.shift.code)}</b> ${dayLbl(c.next.date)} · ${c.next.shift.start}–${c.next.shift.end}</div>`:'';
- if(c.state==='on'||c.state==='before'){const s=c.shift;return `<div class="shiftcard${c.state==='on'&&c.remainingMs<=600000?' last10':''}"><div class="ringwrap">${ring(c.state==='on'?1-c.progress:1)}<div class="ringtxt"><div class="cd" id="cd">${fmtDur(c.remainingMs)}</div><div class="cdl">${c.state==='on'?'until '+s.end:'starts '+s.start}</div></div></div>
-  <div class="shinfo">${code(s)}<div class="shname">${A.esc(s.name)}</div><div class="shtime">${s.start} – ${s.end}</div><div class="shhrs">${SH.hours(s)} h${s.end<s.start?' · overnight':''}${c.day!==A.todayKey()?' · started yesterday':''}</div>${c.state==='before'?'<div class="pill2">Upcoming today</div>':'<div class="pill2 live"><i></i>On shift</div>'}</div></div>${c.state==='on'?'':''}`;}
+ if(c.state==='on'||c.state==='before'){const s=c.shift;return `<div class="shiftcard${c.state==='on'&&c.remainingMs<=600000?' last10':''}"><div class="ringwrap">${ring(c.state==='on'?1-c.progress:1)}<div class="ringtxt"><div class="cd" id="cd" data-ms="${c.remainingMs}" aria-label="${fmtDur(c.remainingMs)} remaining">${cdHTML(c.remainingMs)}</div><div class="cdl">${c.state==='on'?'until '+s.end:'starts '+s.start}</div></div></div>
+  <div class="shinfo">${code(s)}<div class="shname">${A.esc(s.name)}</div><div class="shtime">${s.start} – ${s.end}</div><div class="shhrs">${Math.round(SH.hours(s)*10)/10} h${s.end<s.start?' · overnight':''}${c.day!==A.todayKey()?' · started yesterday':''}</div>${c.state==='before'?'<div class="pill2">Upcoming today</div>':'<div class="pill2 live"><i></i>On shift</div>'}</div></div>${c.state==='on'?'':''}`;}
  if(c.state==='after')return `<div class="shiftcard plain"><div class="shinfo wide">${code(c.shift)}<div class="shname">Shift completed at ${c.shift.end}</div>${nx}</div></div>`;
  if(c.state==='off')return `<div class="shiftcard plain"><div class="shinfo wide">${code(c.shift)}<div class="shname">Off today · ${A.esc(c.shift.name)}</div>${nx}</div></div>`;
  return `<div class="shiftcard plain"><div class="shinfo wide"><div class="shname">No roster entry for today</div>${nx||'<div class="nextline">Import your duty roster to see your shifts.</div>'}<button class="btn onnavy" id="h-imp">Import roster</button></div></div>`;}
@@ -30,12 +34,12 @@ A.R.home=function(){const S=A.S,pr=S.profile||{};const c=A.shiftNow();const toda
  A.remCount&&A.remCount().then(n=>{const e=A.$('#h-rem-n');if(e)e.textContent=n;});
  tickClock();let last=c.state;const day0=A.todayKey();A.S.tick=setInterval(()=>{const n=A.shiftNow();if(n.state!==last||A.todayKey()!==day0||(n.shift&&c.shift&&n.shift.code!==c.shift.code)){A.go('home',{keepScroll:true});return;}
   const sc=A.$('.shiftcard');if(sc)sc.classList.toggle('last10',n.state==='on'&&n.remainingMs<=600000);
-  const cd=A.$('#cd');if(cd)cd.textContent=fmtDur(n.remainingMs);const rb=A.$('#ringbar');if(rb&&n.state==='on'){const C=2*Math.PI*84;rb.setAttribute('stroke-dashoffset',C*(n.progress));}
+  const cd=A.$('#cd');if(cd){const h=cdHTML(n.remainingMs);if(cd.innerHTML!==h)cd.innerHTML=h;cd.dataset.ms=n.remainingMs;cd.setAttribute('aria-label',fmtDur(n.remainingMs)+' remaining');}const rb=A.$('#ringbar');if(rb&&n.state==='on'){const C=2*Math.PI*84;rb.setAttribute('stroke-dashoffset',C*(n.progress));}
   tickClock();},1000);};
 A.fmtDur=fmtDur;
 /* 3.5 large digital clock: hours:minutes big, seconds + date smaller */
-function dclock(){const d=new Date();return `<div class="dclock" role="timer" aria-label="Current time"><div class="dct"><span class="hm" id="dc-hm">${fmtHM(d)}</span><span class="ss" id="dc-s">${A.pad2(d.getSeconds())}</span></div><div class="dcd" id="dc-d">${d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div></div>`;}
-function tickClock(){const d=new Date();const a=A.$('#dc-hm'),b=A.$('#dc-s'),c=A.$('#dc-d');if(a)a.textContent=fmtHM(d);if(b)b.textContent=A.pad2(d.getSeconds());if(c)c.textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}
+function dclock(){const d=new Date();return `<div class="dclock" role="timer" aria-label="Current time"><div class="dct"><span class="hm" id="dc-hm" aria-label="${fmtHM(d)}">${hmHTML(d)}</span></div><div class="dcd" id="dc-d">${d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div></div>`;}
+function tickClock(){const d=new Date();const a=A.$('#dc-hm'),b=A.$('#dc-s'),c=A.$('#dc-d');if(a){const h=hmHTML(d);if(a.innerHTML!==h)a.innerHTML=h;a.setAttribute('aria-label',fmtHM(d));}if(c)c.textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}
 /* upcoming shifts straight from the imported roster (follows into next month automatically) */
 function upcoming(){const out=[];let t=new Date();const c=A.shiftNow();if(c.state==='on')t=new Date(c.end.getTime()+1);
  for(let i=0;i<4;i++){const n=SH.nextShift(t,A.S.roster||{},A.S.codes||SH.DEFAULT_CODES,45);if(!n)break;out.push(n);t=new Date(n.start.getTime()+1);}

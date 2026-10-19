@@ -2,7 +2,7 @@
     Local-only: all data in IndexedDB on this device. No network calls, no analytics. */
 (function(){
 'use strict';
-const VERSION='3.5.0';
+const VERSION='3.6.0';
 const COPY='Copyright (c) 2026 Abdalla Abbadi. All rights reserved.';
 const EMAIL='a.abbadi@edcad.ae';
 const AS=n=>(window.__ASSETS__&&window.__ASSETS__[n])||n;
@@ -228,7 +228,7 @@ function pageHead(title,right=''){return `<header class="nav" id="nav"><div clas
 function view(){let v=$('#view');if(!v){$('#app').innerHTML=`<div id="view"></div><nav class="tabbar" id="tabbar">${TABS.map(([k,l,p])=>`<button data-tab="${k}" aria-label="${l}"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg><span>${l}</span></button>`).join('')}</nav>`;
  $$('#tabbar [data-tab]').forEach(b=>b.onclick=()=>{haptic();b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop');go(b.dataset.tab);});v=$('#view');}return v;}
 function go(tab,opts){S.tab=tab;view();$$('#tabbar [data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===(tab==='batch'||tab==='school'?'patients':tab)));window.onscroll=null;if(S.tick){clearInterval(S.tick);S.tick=null;}
- (tab==='patients'?renderPatients:tab==='settings'?renderSettings:R[tab]||renderPatients)(opts);if(!opts||!opts.keepScroll)scrollTo(0,0);}
+ (tab==='patients'?renderPatients:tab==='settings'?renderSettings:R[tab]||renderPatients)(opts);if(!opts||!opts.keepScroll)scrollTo(0,0);window.AHV.afterGo&&window.AHV.afterGo(tab);}
 /* ---------------- patients ---------------- */
 function chips(p){const b=bmi(p),c=[],f=cls(p);const ch=(k,lab,val,fl)=>`<span class="chip ${fl}">${fl==='crit'?'⚠︎ ':''}<b>${lab}</b>${val}</span>`;
  if(p.sys!=null)c.push(ch('bp','BP',p.sys+'/'+p.dia,f.bp));
@@ -272,7 +272,7 @@ function renderPatients(){const pr=S.profile||{};const list=visible();const q=S.
  $('#x-csv').onclick=async()=>{const l=need();if(l)Export.deliver([await Export.csv(l,scopeLabel())],false);};
  $('#x-xlsx').onclick=async()=>{const l=need();if(l)Export.deliver([await Export.xlsx(l,scopeLabel())],false);};
  $('#x-print').onclick=async()=>{const l=need();if(l)Export.print(l,scopeLabel());};
- $('#x-share').onclick=async()=>{const l=need();if(l)Export.deliver([await Export.pdf(l,scopeLabel()),await Export.csv(l,scopeLabel())],true);};}
+ $('#x-share').onclick=async()=>{const l=need();if(l)Export.deliver([await Export.pdf(l,scopeLabel()),await Export.csv(l,scopeLabel())],true);};window.AHV.afterPatients&&window.AHV.afterPatients();}
 function render(){renderHome();}
 /* ---------------- fast entry ---------------- */
 function newPatient(){const p={id:uid(),ts:Date.now(),name:'',mrn:'',age:null,infant:false,ht:null,wt:null,sys:null,dia:null,temp:null,pr:null,rr:RG.defaultRR({}),spo2:RG.DEFAULT_SPO2,rrAuto:true,nurse:S.profile?S.profile.staffId:''};
@@ -397,13 +397,10 @@ function renderSettings(){window.onscroll=null;const pr=S.profile||{};
  <div class="sec">Security</div><div class="group"><button class="cell" id="s-pin"><div class="grow" style="color:var(--navy)">Change Passcode</div>${I.chev}</button><div class="cell"><div class="grow">Face ID unlock<div class="s" id="s-bio-s">${window.AHVBio&&AHVBio.enrolled()?(AHVBio.mode()==='passkey-noprf'?'On · passcode still needed for records':'On · passcode is the fallback'):'Off · set up after your passcode'}</div></div><input type="checkbox" class="switch" id="s-bio" aria-label="Face ID unlock" ${window.AHVBio&&AHVBio.enrolled()?'checked':''}></div>
   <label class="cell"><div class="grow">Auto-lock after 1 minute away</div><input type="checkbox" class="switch" id="s-auto" ${localStorage.getItem('ahv_autolock')!=='0'?'checked':''}></label>
   <button class="cell" id="s-lock"><div class="grow" style="color:var(--navy)">Lock Now</div></button></div>
- <div class="sec">Data & privacy</div><div class="group"><div class="cell"><div class="grow" style="font-size:15px;line-height:1.4">Patient data is stored only on this iPhone (${DB.mode}). The app makes no network requests and contains no analytics or tracking.</div></div>
+ <div class="sec">Data & privacy</div><div class="group"><div class="cell"><div class="grow" style="font-size:15px;line-height:1.4">Patient data is stored only on this iPhone (${DB.mode}). Patient data never leaves the device. The only network request is the Al Ain weather (Open-Meteo, location only, no personal data); no analytics or tracking.</div></div>
   <div class="cell"><div class="grow">Patients stored</div><span style="color:var(--sub)">${S.patients.length}</span></div>
   <button class="cell" id="s-wipe"><div class="grow" style="color:var(--bad)">Erase All Patient Data & Roster</div></button></div>
- <div class="sec">About</div><div class="group"><div class="about-logos"><img class="about-main" src="${LOGO}" alt="Al Hili Clinic"></div>
-  <div class="about-logos" style="padding-top:0"><img src="${AS('img/seha-uae.png')}" alt="SEHA"><img src="${AS('img/seha-clinics.png')}" alt="SEHA Clinics"><img src="${AS('img/seha-adhs.jpg')}" alt="SEHA Abu Dhabi Health Services"></div>
-  <div class="cell"><div class="grow">Al Hili Vitals</div><span style="color:var(--sub)">Version ${VERSION}</span></div>
-  <div class="cell"><div class="grow" style="font-size:14px;line-height:1.5">${COPY}<br><a href="mailto:${EMAIL}" style="color:var(--navy)">${EMAIL}</a></div></div></div></main>`;
+ <div class="sec">About</div>${window.AHV.aboutHTML?window.AHV.aboutHTML():""}<div class="group"><div class="cell"><div class="grow">Al Hili Vitals</div><span style="color:var(--sub)">Version ${VERSION}</span></div><div class="cell"><div class="grow" style="font-size:14px;line-height:1.5">${COPY}<br><a href="mailto:${EMAIL}" style="color:var(--navy)">${EMAIL}</a></div></div></div></main>`;
  $('#s-ranges').onclick=()=>window.AHV.openRanges();$('#s-copy').onclick=()=>window.AHV.openCopyOrder();$('#s-sum').onclick=()=>window.AHV.openSummary();$('#s-rem').onclick=()=>window.AHV.openReminders();$('#s-codes').onclick=()=>window.AHV.openCodes();$('#s-guide').onclick=()=>window.AHV.onboard({force:true});$('#s-roster').onclick=()=>go('profile');
  window.AHV.remSummary&&window.AHV.remSummary().then(t=>{const e=$('#s-rem-s');if(e)e.textContent=t;});
  $('#s-prof').onclick=()=>{const root=$('#sheet-root');root.innerHTML=`<div class="scrim"><div class="sheet"><div class="shead"><div class="grab"></div><div class="topbar"><button class="txtbtn" id="pp-x">Cancel</button><div class="ttl">Edit Profile</div><span style="width:64px"></span></div></div><div class="sbody" id="pp"></div></div></div>`;
@@ -420,7 +417,7 @@ function renderSettings(){window.onscroll=null;const pr=S.profile||{};
  $('#s-auto').onchange=e=>localStorage.setItem('ahv_autolock',e.target.checked?'1':'0');
  $('#s-lock').onclick=lockNow;
  $('#s-wipe').onclick=async()=>{if(!confirm('Erase ALL patient records on this device? This cannot be undone.'))return;if(!(await Lock.unlock(true)))return;await DB.clear();for(const k of ['roster','rosterTeam'])await DB.kdel(k);S.roster={};S.rosterMeta={};S.team=null;await load();renderSettings();toast('All patient data and roster erased');};
- $$('.about-logos img').forEach(i=>i.loading='lazy');}
+ window.AHV.afterSettings&&window.AHV.afterSettings();}
 async function lockNow(){$('#sheet-root').innerHTML='';await Lock.unlock(false);}
 /* ---------------- exports ---------------- */
 const Export=(()=>{
