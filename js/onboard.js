@@ -47,7 +47,7 @@ const P={
   async status(){if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())return 'granted';if(!this.supported())return 'unsupported';return (await navigator.storage.persisted())?'granted':'prompt';},
   async request(){return (await navigator.storage.persist())?'granted':'denied';},
   fix:{ios:'iOS decides this automatically: add the app to the Home Screen and open it regularly — Home Screen apps keep their data.',native:'',android:'Install the app (Add to Home screen) — installed apps are granted persistent storage.',desktop:'Install the app or bookmark it; the browser grants persistence to sites you use often.'}}};
-const ORDER=['notif','cam','mic','store'];
+const ORDER=['notif','cam','mic','store'];A.PERM=P;A.PERM_ORDER=ORDER;
 const LBL={granted:'Allowed',denied:'Blocked',prompt:'Not asked yet','prompt-with-rationale':'Not asked yet',unsupported:'Not supported here',error:'Failed'};
 const CLS={granted:'ok',denied:'bad',unsupported:'mute',error:'bad'};
 A.S.permCache=JSON.parse(localStorage.getItem('ahv_perm')||'{}');

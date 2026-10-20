@@ -48,8 +48,12 @@ async function devCheck(pw){const k=await crypto.subtle.importKey('raw',new Text
  const h=bhex(await crypto.subtle.deriveBits({name:'PBKDF2',salt:hexb(DEV.salt),iterations:DEV.it,hash:'SHA-256'},k,256));let x=0;for(let i=0;i<h.length;i++)x|=h.charCodeAt(i)^DEV.hash.charCodeAt(i);return x===0;}
 const devOn=()=>localStorage.getItem('ahv_dev')==='1';A.devOn=devOn;
 const lim=()=>{try{return JSON.parse(localStorage.getItem('ahv_devlim')||'{}');}catch(_){return{};}};
-function setDev(on){if(on)localStorage.setItem('ahv_dev','1');else{localStorage.removeItem('ahv_dev');P.stop();P.close();}document.documentElement.classList.toggle('devmode',on);A.islandTick&&A.islandTick();}
+function setDev(on){if(on)localStorage.setItem('ahv_dev','1');else{localStorage.removeItem('ahv_dev');if(!revealed()){P.stop();P.close();}}document.documentElement.classList.toggle('devmode',on);A.islandTick&&A.islandTick();}
 A.setDev=setDev;
+/* 3.9: regular users get the same player, hidden until the island pill is tapped 5 times quickly; Stop stops the audio and hides it again */
+const revealed=()=>localStorage.getItem('ahv_plr')==='1';
+function reveal(on){if(on)localStorage.setItem('ahv_plr','1');else localStorage.removeItem('ahv_plr');const isl=document.getElementById('island');isl&&isl.classList.toggle('plr',on||devOn());A.islandTick&&A.islandTick();}
+const plrOn=()=>devOn()||revealed();A.playerRevealed=revealed;A.revealPlayer=reveal;
 function devSheet(done){const L=lim();const wait=L.until&&Date.now()<L.until?Math.ceil((L.until-Date.now())/1000):0;
  const close=A.sheet('Developer mode',`<form id="dv-f" autocomplete="off"><p class="small" style="margin:0 0 10px">Enter the developer password to turn on developer features (island media player).</p>
   <div class="lbl">Password</div><div class="big name"><input id="dv-p" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Developer password" ${wait?'disabled':''}></div>
@@ -76,6 +80,12 @@ const SRC=[
  {id:'qk',name:'Holy Quran Radio',ar:'إذاعة القرآن الكريم',sub:'Abu Dhabi Media · 98.1 FM Abu Dhabi · 88.6 Al Ain',hue:'#2FB57A',live:ADMN+'quran/quran_hls_nd/index_quranfm_audio_enc_ara.m3u8'},
  {id:'adfm',name:'Abu Dhabi FM',ar:'إذاعة أبوظبي',sub:'Abu Dhabi Media · 98.4 FM',hue:'#37AFC8',live:ADMN+'abudhabi_fm/abudhabi_fm_hls_nd/index_adfm_audio_enc_ara.m3u8'}];
 A.MEDIA_SOURCES=SRC;
+/* 3.9: whitelist-only display text. Titles come from the fixed list above; remote stream metadata (ID3/ICY/emsg) is never read or shown.
+   Anything that looks like a URL, shell command or markup is dropped, then the text is HTML-escaped where rendered. */
+const BAD=/(https?:|www\.|\b(curl|wget|bash|sh|zsh|sudo|chmod|eval|powershell|iex|install)\b|[|`$<>{};\\])/i;
+function safeText(t,fb){t=String(t==null?'':t).normalize('NFC').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g,'').trim();
+ if(!t||BAD.test(t)||!/^[\p{L}\p{M}\p{N} .,:'’·\-–—()&/+]{1,80}$/u.test(t))return fb||'';return t;}
+A.safeText=safeText;
 const ART=A.AS?A.AS('icons/icon-512.png'):'icons/icon-512.png';
 const au=document.createElement('audio');au.id='dp-audio';au.preload='none';au.setAttribute('playsinline','');au.setAttribute('webkit-playsinline','');au.crossOrigin='anonymous';document.body.appendChild(au);
 let src=SRC[new Date().getHours()<12?0:1],ti=0,hls=null,open=false,state='idle',err='';
@@ -85,13 +95,14 @@ async function attach(){if(hls){hls.destroy();hls=null;}err='';
  if(!isLive()){au.removeAttribute('crossorigin');au.src=src.tracks[ti].u;return;}
  au.crossOrigin='anonymous';
  if(au.canPlayType('application/vnd.apple.mpegurl')){au.src=src.live;return;}
- const H=await loadHls();if(H&&H.isSupported()){hls=new H({lowLatencyMode:false,maxBufferLength:20});hls.on(H.Events.ERROR,(e,d)=>{if(d.fatal){err='Stream unavailable — check the connection';state='error';render();}});hls.loadSource(src.live);hls.attachMedia(au);}
+ const H=await loadHls();if(H&&H.isSupported()){hls=new H({lowLatencyMode:false,maxBufferLength:20,enableID3MetadataCues:false,enableEmsgMetadataCues:false,enableWebVTT:false,enableIMSC1:false,enableCEA708Captions:false,renderTextTracksNatively:false});hls.on(H.Events.ERROR,(e,d)=>{if(d.fatal){err='Stream unavailable — reconnecting';state='error';render();reconnect('hls');}});hls.loadSource(src.live);hls.attachMedia(au);}
  else au.src=src.live;}
+let want=false,retry=0,rt=0;
 const P={
- async play(){try{if(!au.src&&!hls)await attach();state='loading';render();await au.play();}catch(e){state='error';err=e&&e.name==='NotAllowedError'?'Tap play to start':'Could not start playback';render();}},
- pause(){au.pause();},
+ async play(){want=true;try{if(!au.src&&!hls)await attach();state='loading';render();await au.play();}catch(e){state='error';err=e&&e.name==='NotAllowedError'?'Tap play to start':'Could not start playback';render();}},
+ pause(){want=false;au.pause();},
  toggle(){au.paused?P.play():P.pause();},
- stop(){au.pause();if(hls){hls.destroy();hls=null;}au.removeAttribute('src');au.load();state='idle';render();meta();},
+ stop(){want=false;clearTimeout(rt);au.pause();if(hls){hls.destroy();hls=null;}au.removeAttribute('src');au.load();state='idle';render();meta();},
  async pick(id){const s=SRC.find(x=>x.id===id);if(!s)return;const was=!au.paused||state==='loading';P.stop();src=s;ti=0;await attach();render();meta();if(was||true)P.play();},
  async track(d){if(isLive())return;const n=src.tracks.length;ti=(ti+d+n)%n;await attach();meta();P.play();},
  seek(t){if(!isLive()&&isFinite(au.duration))au.currentTime=Math.max(0,Math.min(au.duration-.2,t));},
@@ -100,10 +111,17 @@ A.player=P;
 au.addEventListener('playing',()=>{state='playing';render();meta();});au.addEventListener('pause',()=>{if(state!=='idle')state='paused';render();});
 au.addEventListener('waiting',()=>{state='loading';render();});au.addEventListener('ended',()=>{if(!isLive()){if(ti<src.tracks.length-1)P.track(1);else{state='paused';ti=0;attach();render();}}});
 au.addEventListener('error',()=>{if(!au.getAttribute('src'))return;state='error';err='Source unavailable — check the connection';render();});
-au.addEventListener('timeupdate',()=>{prog();posState();});
+au.addEventListener('timeupdate',()=>{prog();posState();retry=0;});
+/* reconnect: stalled/errored live streams and network changes re-attach the source while the user still wants audio */
+function reconnect(why){if(!want||document.visibilityState==='prerender')return;clearTimeout(rt);const d=Math.min(15000,1500*Math.pow(2,retry++));
+ state='loading';err='Reconnecting…';render();rt=setTimeout(async()=>{if(!want)return;try{if(isLive()){await attach();}else{const t=au.currentTime;await attach();au.currentTime=t||0;}await au.play();}catch(e){reconnect('retry');}},d);}
+au.addEventListener('stalled',()=>{if(isLive())reconnect('stalled');});au.addEventListener('error',()=>reconnect('error'));
+addEventListener('online',()=>{if(want&&au.paused)reconnect('online');});
+if(navigator.connection&&navigator.connection.addEventListener)navigator.connection.addEventListener('change',()=>{if(want&&isLive())reconnect('network');});
+au.addEventListener('pause',()=>{if(want&&!document.hidden)return;});
 /* MediaSession: lock-screen / Control Centre metadata and buttons */
-function meta(){if(!('mediaSession' in navigator))return;const t=isLive()?src.name:src.tracks[ti].t;
- try{navigator.mediaSession.metadata=new MediaMetadata({title:isLive()?`${src.name} · Live`:`${t} — ${src.name}`,artist:isLive()?src.sub:'Mishary Rashid Alafasy',album:'Al Hili Vitals',artwork:[{src:new URL(ART,location.href).href,sizes:'512x512',type:'image/png'}]});}catch(_){}
+function meta(){if(!('mediaSession' in navigator))return;const t=safeText(isLive()?src.name:src.tracks[ti].t,'Al Hili Vitals');
+ try{navigator.mediaSession.metadata=new MediaMetadata({title:isLive()?`${safeText(src.name,'Radio')} · Live`:`${t} — ${safeText(src.name,'')}`,artist:isLive()?safeText(src.sub,'Abu Dhabi Media'):'Mishary Rashid Alafasy',album:'Al Hili Vitals',artwork:[{src:new URL(ART,location.href).href,sizes:'512x512',type:'image/png'}]});}catch(_){}
  navigator.mediaSession.playbackState=state==='playing'?'playing':state==='paused'?'paused':'none';}
 function posState(){if(!('mediaSession' in navigator)||isLive()||!isFinite(au.duration)||!navigator.mediaSession.setPositionState)return;try{navigator.mediaSession.setPositionState({duration:au.duration,position:Math.min(au.currentTime,au.duration),playbackRate:1});}catch(_){}}
 if('mediaSession' in navigator){const ms=navigator.mediaSession,h=(a,f)=>{try{ms.setActionHandler(a,f);}catch(_){}};
@@ -125,7 +143,7 @@ const scrim=document.createElement('div');scrim.id='dp-scrim';scrim.hidden=true;
 const fmt=s=>{if(!isFinite(s))return'--:--';s=Math.max(0,Math.floor(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
 function build(){const live=isLive(),t=live?null:src.tracks[ti];
  pn.style.setProperty('--hue',src.hue);
- pn.innerHTML=`<div class="dp-glow" aria-hidden="true"></div><div class="dp-top"><div class="dp-art" aria-hidden="true"><span dir="rtl">${esc(src.ar)}</span></div><div class="dp-ttl"><b id="dp-t">${esc(live?src.name:t.t)}</b><span id="dp-s">${esc(live?src.sub:src.name+' · '+(ti+1)+' of '+src.tracks.length)}</span></div>
+ pn.innerHTML=`<div class="dp-top"><div class="dp-art" aria-hidden="true"><span dir="rtl">${esc(src.ar)}</span></div><div class="dp-ttl"><b id="dp-t">${esc(safeText(live?src.name:t.t,'Now playing'))}</b><span id="dp-s">${esc(safeText(live?src.sub:src.name+' · '+(ti+1)+' of '+src.tracks.length,''))}</span></div>
   ${live?'<span class="dp-live" aria-label="Live"><i></i>LIVE</span>':''}<button class="dp-x" id="dp-close" aria-label="Collapse player"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
   ${src.zikr?`<div class="dp-zikr" dir="rtl" lang="ar">${esc(src.zikr)}</div>`:''}
   <div class="dp-wave" aria-hidden="true">${Array.from({length:42},(_,i)=>`<i style="--h:${(0.28+0.72*Math.abs(Math.sin(i*1.7)*Math.cos(i*.53))).toFixed(2)};--d:${(i%7)*.09}s"></i>`).join('')}</div>
@@ -133,30 +151,32 @@ function build(){const live=isLive(),t=live?null:src.tracks[ti];
   <div class="dp-ctl"><button id="dp-prev" aria-label="${live?'Previous source':'Previous'}">${I.prev}</button>${live?'':`<button id="dp-b10" aria-label="Back 10 seconds">${I.b10}</button>`}
    <button id="dp-pp" class="dp-pp" aria-label="Play">${I.play}</button>${live?'':`<button id="dp-f10" aria-label="Forward 10 seconds">${I.f10}</button>`}<button id="dp-next" aria-label="${live?'Next source':'Next'}">${I.next}</button></div>
   <div class="dp-src" role="tablist" aria-label="Source">${SRC.map(s=>`<button role="tab" data-s="${s.id}" aria-selected="${s===src}" class="${s===src?'on':''}" style="--hue:${s.hue}">${SI[s.id]}<b>${esc(s.name)}</b><span dir="rtl" lang="ar">${esc(s.ar)}</span></button>`).join('')}</div>
-  <div class="dp-foot"><button id="dp-stop" class="dp-stop">${I.stop}Stop</button><span>${live?'Official ADMN stream':'Audio: Quran.com / QuranicAudio'}</span></div>`;
- $('#dp-close',pn).onclick=closePanel;$('#dp-pp',pn).onclick=()=>{A.haptic&&A.haptic();P.toggle();};$('#dp-stop',pn).onclick=()=>{A.haptic&&A.haptic();P.stop();};
+  <div class="dp-foot"><button id="dp-stop" class="dp-stop">${I.stop}Stop</button><span class="dp-credit" title="${live?'Official ADMN stream':'Audio: Quran.com / QuranicAudio'}">Developed by Abdalla Abbadi</span></div>`;
+ $('#dp-close',pn).onclick=closePanel;$('#dp-pp',pn).onclick=()=>{A.haptic&&A.haptic();P.toggle();};$('#dp-stop',pn).onclick=()=>{A.haptic&&A.haptic();P.stop();if(!devOn()){reveal(false);closePanel();}};
  $('#dp-prev',pn).onclick=()=>live?P.pick(SRC[(SRC.indexOf(src)+SRC.length-1)%SRC.length].id):P.track(-1);$('#dp-next',pn).onclick=()=>live?P.pick(SRC[(SRC.indexOf(src)+1)%SRC.length].id):P.track(1);
  if(!live){$('#dp-b10',pn).onclick=()=>P.seek(au.currentTime-10);$('#dp-f10',pn).onclick=()=>P.seek(au.currentTime+10);const sk=$('#dp-seek',pn);sk.oninput=()=>{if(isFinite(au.duration))P.seek(sk.value/1000*au.duration);};}
  $$('.dp-src button',pn).forEach(b=>b.onclick=()=>{A.haptic&&A.haptic();P.pick(b.dataset.s);});render();}
 let built='';function render(){const key=src.id+':'+ti;if(open&&built!==key){built=key;build();return;}
  const pp=$('#dp-pp',pn);if(pp){const playing=state==='playing'||state==='loading';pp.innerHTML=playing?I.pause:I.play;pp.setAttribute('aria-label',playing?'Pause':'Play');}
  pn.dataset.state=state;const st=$('#dp-st',pn);if(st)st.textContent=state==='loading'?'Connecting…':state==='error'?err:'';
- const isl=$('#island');if(isl){isl.classList.toggle('playing',state==='playing');isl.classList.toggle('media',state!=='idle'&&devOn());}
+ const isl=$('#island');if(isl){isl.classList.toggle('playing',state==='playing');isl.classList.toggle('media',state!=='idle'&&plrOn());}
  prog();A.islandTick&&A.islandTick();}
 function prog(){if(!open||isLive())return;const d=au.duration,c=au.currentTime;const sk=$('#dp-seek',pn);if(sk&&isFinite(d)&&d>0){sk.value=Math.round(c/d*1000);sk.style.setProperty('--p',(c/d*100).toFixed(1)+'%');
   const n=$$('.dp-wave i',pn),k=Math.round(c/d*n.length);n.forEach((x,i)=>x.classList.toggle('past',i<k));}
  const el=$('#dp-el',pn),du=$('#dp-du',pn);if(el)el.textContent=fmt(c);if(du)du.textContent=isFinite(d)?'-'+fmt(d-c):'--:--';}
-function openPanel(){if(!devOn())return;open=true;built='';pn.hidden=false;scrim.hidden=false;build();requestAnimationFrame(()=>{pn.classList.add('on');scrim.classList.add('on');});const isl=$('#island');isl&&isl.classList.add('expanded');setTimeout(()=>{const b=$('#dp-pp',pn);b&&b.focus({preventScroll:true});},80);}
+function openPanel(){if(!plrOn())return;open=true;built='';pn.hidden=false;scrim.hidden=false;build();requestAnimationFrame(()=>{pn.classList.add('on');scrim.classList.add('on');});const isl=$('#island');isl&&isl.classList.add('expanded');setTimeout(()=>{const b=$('#dp-pp',pn);b&&b.focus({preventScroll:true});},80);}
 function closePanel(){if(!open)return;open=false;pn.classList.remove('on');scrim.classList.remove('on');const isl=$('#island');isl&&isl.classList.remove('expanded');setTimeout(()=>{if(!open){pn.hidden=true;scrim.hidden=true;}},RM()?0:380);}
 addEventListener('keydown',e=>{if(e.key==='Escape'&&open)closePanel();});
 /* the island: tap → expand player in developer mode (otherwise the 3.6 shift/patients toggle); shows what's playing */
 function hookIsland(){const isl=$('#island');if(!isl||isl._v38)return;isl._v38=true;const orig=isl.onclick;
- isl.onclick=e=>{if(devOn()){A.haptic&&A.haptic();open?closePanel():openPanel();return;}orig&&orig.call(isl,e);};
+ let taps=[];isl.onclick=e=>{if(plrOn()){A.haptic&&A.haptic();open?closePanel():openPanel();return;}
+  const now=Date.now();taps=taps.filter(t=>now-t<2500);taps.push(now);
+  if(taps.length>=5){taps=[];reveal(true);A.haptic&&A.haptic('success');openPanel();return;}orig&&orig.call(isl,e);};
  if(!$('.ieq',isl))isl.insertAdjacentHTML('beforeend','<span class="ieq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>');}
 hookIsland();setTimeout(hookIsland,500);
 const tickPrev=A.islandTick;if(tickPrev){A.islandTick=function(){tickPrev.apply(this,arguments);const isl=$('#island');if(!isl)return;
- if(devOn()&&state!=='idle'&&!isl.classList.contains('hide')){const tx=$('.itx',isl);const t=isLive()?src.name:src.tracks[ti].t;const h=`<b>${esc(t)}</b>`;if(tx.innerHTML!==h){tx.innerHTML=h;isl.style.width=Math.min(innerWidth-120,Math.max(150,tx.scrollWidth+74))+'px';}isl.setAttribute('aria-label',`Now playing ${t} — tap to open the player`);}
- else if(devOn()&&!isl.classList.contains('hide'))isl.setAttribute('aria-label',($('.itx',isl).textContent||'')+' — tap to open the media player');};}
+ if(plrOn()&&state!=='idle'&&!isl.classList.contains('hide')){const tx=$('.itx',isl);const t=safeText(isLive()?src.name:src.tracks[ti].t,'Now playing');const h=`<b>${esc(t)}</b>`;if(tx.innerHTML!==h){tx.innerHTML=h;isl.style.width=Math.min(innerWidth-120,Math.max(150,tx.scrollWidth+74))+'px';}isl.setAttribute('aria-label',`Now playing ${t} — tap to open the player`);}
+ else if(plrOn()&&!isl.classList.contains('hide'))isl.setAttribute('aria-label',($('.itx',isl).textContent||'')+' — tap to open the media player');};}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)render();});
 /* ---------- 5. widget data bridge (iOS WidgetKit extension reads this through the App Group) ---------- */
 function widgetData(){const c=A.shiftNow&&A.shiftNow();const code=c&&c.shift?c.shift.code:null;const np=A.nextPrayer&&A.nextPrayer();
