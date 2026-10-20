@@ -2,11 +2,11 @@
     Local-only: all data in IndexedDB on this device. No network calls, no analytics. */
 (function(){
 'use strict';
-const VERSION='3.6.3';
+const VERSION='3.7.0';
 const COPY='Copyright (c) 2026 Abdalla Abbadi. All rights reserved.';
 const EMAIL='a.abbadi@edcad.ae';
 const AS=n=>(window.__ASSETS__&&window.__ASSETS__[n])||n;
-const LOGO=AS('icons/logo-900.png'), BG=AS('img/hili-center.jpg');
+const LOGO=AS('icons/logo-900.png'), LOGO_L=AS('icons/logo-light-900.png'), BG=AS('img/hili-center.jpg');
 /* ---------------- storage ---------------- */
 const DB=(()=>{let dbp=null,fb=false;
  const open=()=>dbp||(dbp=new Promise((res,rej)=>{try{const r=indexedDB.open('alhili-vitals-2',1);
@@ -117,17 +117,19 @@ const Lock=(()=>{
  const LOCKS=[0,0,0,0,0,30,60,300,900,3600];// seconds of lockout after the n-th consecutive failure (persists across reloads)
  let open=false;
  function screen({title,sub,cancel,bio}){return new Promise(res=>{open=true;const pr=S.profile||{};
-  const el=document.createElement('div');el.className='lock';
-  el.innerHTML=`<div class="bg"><div class="kb" style="background-image:url('${BG}')"></div><div class="sun"></div></div><div class="ov"></div>
-  <div class="clock"><div class="d" id="lk-d"></div><div class="t" id="lk-t"></div><div class="org">Al Hili Healthcare Center · SEHA</div></div>
-  <div class="glass panel" id="lk-p"><span class="brand"><img src="${LOGO}" alt="Al Hili Clinic"></span>
-   ${pr.name?`<div class="who">${pr.photo?`<img src="${pr.photo}" alt="">`:''}<div><div class="n">${esc(pr.name)}</div><div class="i">Staff ID ${esc(pr.staffId||'')}</div></div></div>`:''}
-   <div class="msg" id="lk-m">${esc(title)}</div>${bio?`<button class="faceid" id="lk-f" type="button"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><path d="M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 15.5c1.4 1.2 3.6 1.2 5 0"/></svg>Unlock with Face ID</button>`:''}<div class="dots">${'<i></i>'.repeat(4)}</div>
-   <div class="pad">${[['1',''],['2','ABC'],['3','DEF'],['4','GHI'],['5','JKL'],['6','MNO'],['7','PQRS'],['8','TUV'],['9','WXYZ']].map(([n,l])=>`<button class="key" data-n="${n}">${n}${l?`<small>${l}</small>`:'<small>&nbsp;</small>'}</button>`).join('')}
-   <button class="key t" id="lk-c">${cancel?'Cancel':''}</button><button class="key" data-n="0">0<small>&nbsp;</small></button><button class="key t" id="lk-b" aria-label="Delete">⌫</button></div></div>
+  const el=document.createElement('div');el.className='lock v37';
+  el.innerHTML=`<div class="bg" aria-hidden="true"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i><i class="grain"></i>
+   <svg class="ecg" viewBox="0 0 1200 120" preserveAspectRatio="none"><path d="M0 70H420l18-28 22 64 26-92 22 78 14-22H1200"/></svg></div><div class="ov"></div>
+  <div class="lk-wrap"><div class="lk-head"><img class="lk-logo" src="${LOGO_L}" alt="SEHA · Al Hili Clinic">
+   <div class="clock"><div class="t" id="lk-t" aria-live="off"></div><div class="d" id="lk-d"></div></div><div class="org">Al Hili Healthcare Center · SEHA</div></div>
+  <div class="glass panel" id="lk-p" role="dialog" aria-label="Unlock Al Hili Vitals">
+   ${pr.name?`<div class="who">${pr.photo?`<img src="${pr.photo}" alt="">`:`<span class="wi">${esc((pr.name||'?').trim().charAt(0))}</span>`}<div><div class="n">${esc(pr.name)}</div><div class="i">Staff ID ${esc(pr.staffId||'')}</div></div></div>`:''}
+   <div class="msg" id="lk-m" role="status">${esc(title)}</div>${bio?`<button class="faceid" id="lk-f" type="button"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><path d="M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 15.5c1.4 1.2 3.6 1.2 5 0"/></svg>Unlock with Face ID</button>`:''}<div class="dots" aria-hidden="true">${'<i></i>'.repeat(4)}</div>
+   <div class="pad">${[['1',''],['2','ABC'],['3','DEF'],['4','GHI'],['5','JKL'],['6','MNO'],['7','PQRS'],['8','TUV'],['9','WXYZ']].map(([n,l])=>`<button class="key" data-n="${n}">${n}${l?`<small aria-hidden="true">${l}</small>`:'<small aria-hidden="true">&nbsp;</small>'}</button>`).join('')}
+   <button class="key t" id="lk-c" ${cancel?'':'tabindex="-1" aria-hidden="true"'}>${cancel?'Cancel':''}</button><button class="key" data-n="0">0<small aria-hidden="true">&nbsp;</small></button><button class="key t" id="lk-b" aria-label="Delete">⌫</button></div></div></div>
   <div class="foot">Al Hili Vitals ${VERSION} · ${COPY}</div>`;
   document.body.appendChild(el);let v='';
-  const tick=()=>{const d=new Date();$('#lk-t',el).innerHTML=pad2(d.getHours())+':'+pad2(d.getMinutes())+'<small class="lks">'+pad2(d.getSeconds())+'</small>';$('#lk-d',el).textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});};tick();const ti=setInterval(tick,1000);
+  const tick=()=>{const d=new Date();const hm=pad2(d.getHours())+':'+pad2(d.getMinutes());if($('#lk-t',el).textContent!==hm)$('#lk-t',el).textContent=hm;$('#lk-d',el).textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});};tick();const ti=setInterval(tick,1000);
   // parallax: pointer / device tilt / slow auto sway
   const bg=$('.bg',el),pn=$('#lk-p',el);let t0=performance.now(),tx=0,ty=0,raf;
   const loop=now=>{const a=(now-t0)/1000;const ax=Math.sin(a/5)*6+tx,ay=Math.cos(a/7)*4+ty;bg.style.transform=`translate3d(${ax*-1.6}px,${ay*-1.6}px,0)`;pn.style.transform=`translate3d(${ax*.5}px,${ay*.5}px,0)`;raf=requestAnimationFrame(loop);};raf=requestAnimationFrame(loop);
@@ -380,7 +382,7 @@ function openEntry(p,isNew,opt={}){const root=$('#sheet-root');const B=window.AH
 /* ---------------- settings ---------------- */
 function renderSettings(){window.onscroll=null;const pr=S.profile||{};
  view().innerHTML=`${pageHead('Settings')}</header>
- <main><div class="clinic-hero"><img src="${LOGO}" alt="Al Hili Clinic"><div><div class="t">Al Hili Clinic</div><div class="s">SEHA · Abu Dhabi Health Services</div></div></div><div class="sec">Nurse profile</div><div class="group"><button class="cell" id="s-prof"><img class="avatar" style="width:58px;height:58px" src="${pr.photo||''}" alt=""><div class="grow"><div style="font-weight:700;font-size:18px">${esc(pr.name)}</div><div class="s">Staff ID ${esc(pr.staffId)}</div></div>${I.chev}</button>
+ <main><div class="clinic-hero"><img src="${LOGO_L}" alt="Al Hili Clinic"><div><div class="t">Al Hili Clinic</div><div class="s">SEHA · Abu Dhabi Health Services</div></div></div><div class="sec">Nurse profile</div><div class="group"><button class="cell" id="s-prof"><img class="avatar" style="width:58px;height:58px" src="${pr.photo||''}" alt=""><div class="grow"><div style="font-weight:700;font-size:18px">${esc(pr.name)}</div><div class="s">Staff ID ${esc(pr.staffId)}</div></div>${I.chev}</button>
   <div class="cell"><div class="grow"><div class="s" style="margin:0 0 6px">Signature</div>${pr.signature?`<img src="${pr.signature}" alt="" style="max-height:54px;max-width:100%">`:''}</div></div></div>
  <div class="sec">Roster & reminders</div><div class="group">
   <button class="cell" id="s-rem"><span class="ico tq">${I.bell}</span><div class="grow">Reminders<div class="s" id="s-rem-s"></div></div>${I.chev}</button>
@@ -511,7 +513,7 @@ async function deliver(files,share){if(navigator.canShare&&navigator.canShare({f
 /* ---------------- boot ---------------- */
 async function boot(){
 if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!window.__SINGLE__&&!window.Capacitor)navigator.serviceWorker.register('sw.js').then(r=>window.AHV.swUpdates&&window.AHV.swUpdates(r)).catch(()=>{});
- document.body.insertAdjacentHTML('beforeend','<label id="hap" style="position:fixed;left:-99px;top:0;opacity:0;pointer-events:none"><input type="checkbox" switch></label>');
+ document.body.insertAdjacentHTML('beforeend','<label id="hap" aria-hidden="true" style="position:fixed;left:-99px;top:0;opacity:0;pointer-events:none"><input type="checkbox" switch tabindex="-1" aria-label="Haptic feedback"></label>');
  const sp=(window.AHV.intro?window.AHV.intro():splash());S.profile=await DB.kget('profile');await sp;
  if(!S.profile||!Lock.has()){await setupScreen();}else{await Lock.unlock(false);}
  await load();window.AHV.loadExtras&&await window.AHV.loadExtras();
@@ -521,6 +523,6 @@ if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!window._
   else if(localStorage.getItem('ahv_autolock')!=='0'&&Lock.has()&&Date.now()-hid>60000&&!Lock.isOpen()){await Lock.unlock(false);}});
 }
 window.__AHV__={S,DB,Export,load,renderHome,validate,completeRule,bmi,Lock,newPatient};
-Object.assign(window.AHV=window.AHV||{},{pageHead,openEntry,Export,cls,critical,bmi,f1,modal,uid,recentNames,validate,S,DB,R,go,view,$,$$,esc,toast,haptic,I,LOGO,BG,AS,COPY,EMAIL,VERSION,fStamp,fTime,dayKey,todayKey,pad2,Lock,newPatient,dayList,abnormal,lockNow});
+Object.assign(window.AHV=window.AHV||{},{pageHead,openEntry,Export,cls,critical,bmi,f1,modal,uid,recentNames,validate,S,DB,R,go,view,$,$$,esc,toast,haptic,I,LOGO,LOGO_L,BG,AS,COPY,EMAIL,VERSION,fStamp,fTime,dayKey,todayKey,pad2,Lock,newPatient,dayList,abnormal,lockNow});
 window.addEventListener('DOMContentLoaded',boot);
 })();

@@ -11,14 +11,14 @@ function paintCodes(root){$$('.codechip,.codebig,.weekstrip .wd .c,.codepick but
  if(!c){if(el.classList.contains('shc'))el.classList.remove('shc');return;}if(el.style.getPropertyValue('--cc')===c)return;el.classList.add('shc');el.style.setProperty('--cc',c);el.style.setProperty('--ccf',SHX.inkOn(c));});}
 A.paintCodes=paintCodes;let pq=0;new MutationObserver(()=>{if(pq)return;pq=requestAnimationFrame(()=>{pq=0;paintCodes();});}).observe(document.body,{childList:true,subtree:true});
 /* ---------- 2. Dynamic-Island pill ---------- */
-const isl=document.createElement('button');isl.id='island';isl.type='button';isl.setAttribute('aria-label','Live status — tap to switch');isl.innerHTML='<span class="idot"></span><span class="itx"></span>';
+const isl=document.createElement('button');isl.id='island';isl.type='button';isl.innerHTML='<span class="idot"></span><span class="itx"></span>';
 document.documentElement.classList.add('has-island');document.body.appendChild(isl);let imode=localStorage.getItem('ahv-island')||'shift';
 function islandText(){if(!A.S.profile||document.querySelector('.lock,.intro,.setup'))return null;
  if(imode==='shift'){const c=A.shiftNow&&A.shiftNow();if(c&&c.state==='on'){const m=Math.ceil(c.remainingMs/60000);return{t:`<b>${Math.floor(m/60)}h ${A.pad2(m%60)}m</b> left · ${esc(c.shift.code)}`,red:c.remainingMs<=600000,k:'shift'};}
-  if(c&&c.state==='before')return{t:`${esc(c.shift.code)} starts <b>${c.shift.start}</b>`,k:'shift'};return{t:'Off shift',k:'shift'};}
+  if(c&&c.state==='before')return{t:`${esc(c.shift.code)} starts <b>${c.shift.start}</b>`,k:'shift'};if(c&&c.state==='after')return{t:`${esc(c.shift.code)} completed · <b>${esc(c.shift.end)}</b>`,k:'shift'};if(c&&c.state==='off'&&c.shift)return{t:`${esc(c.shift.code)} · ${esc(c.shift.type==='leave'?'On leave':'Day off')}`,k:'shift'};return{t:'Off shift',k:'shift'};}
  const n=A.dayList(A.todayKey()).length;return{t:`<b>${n}</b> patient${n===1?'':'s'} today`,k:'pts'};}
 let lastT='';function islandTick(){const r=islandText();isl.classList.toggle('hide',!r);if(!r)return;isl.classList.toggle('red',!!r.red);isl.dataset.mode=r.k;
- if(r.t!==lastT){lastT=r.t;const tx=$('.itx',isl);tx.innerHTML=r.t;const w=Math.min(innerWidth-120,Math.max(126,tx.scrollWidth+46));isl.style.width=w+'px';}}
+ if(r.t!==lastT){lastT=r.t;const tx=$('.itx',isl);tx.innerHTML=r.t;isl.setAttribute('aria-label',tx.textContent+' — live status, tap to switch');const w=Math.min(innerWidth-120,Math.max(126,tx.scrollWidth+46));isl.style.width=w+'px';}}
 isl.onclick=()=>{A.haptic&&A.haptic();imode=imode==='shift'?'pts':'shift';localStorage.setItem('ahv-island',imode);isl.classList.remove('morph');void isl.offsetWidth;isl.classList.add('morph');setTimeout(islandTick,140);};
 setInterval(islandTick,1000);setTimeout(islandTick,300);A.islandTick=islandTick;
 /* toasts drop from under the island (CSS) + an undo toast */
@@ -81,7 +81,7 @@ const ABOUT=`<h3 class="abt">With Gratitude</h3><p>On behalf of everyone who use
 A.afterSettings=function(){const g=$('#about36');if(!g)return;const tr=$('.abtrack',g);
  const pause=()=>g.classList.add('paused'),res=()=>{clearTimeout(g._t);g._t=setTimeout(()=>g.classList.remove('paused'),1200);};
  g.addEventListener('pointerdown',pause);g.addEventListener('pointerup',res);g.addEventListener('pointercancel',res);g.addEventListener('pointerleave',res);};
-A.aboutHTML=()=>`<div class="about36 glassw" id="about36" aria-label="About"><div class="abtrack"><div class="abcopy">${ABOUT}</div><div class="abcopy" aria-hidden="true">${ABOUT}</div></div></div>`;
+A.aboutHTML=()=>`<div class="about36 glassw" id="about36" aria-label="About"><div class="abtrack"><div class="abcopy">${ABOUT}</div><div class="abcopy" aria-hidden="true" inert>${ABOUT}</div></div></div>`;
 /* ---------- patients: multi-select + Telegram-style dust delete ---------- */
 let sel=null;
 function selBar(){let b=$('#selbar');if(!sel){if(b)b.remove();return;}if(!b){b=document.createElement('div');b.id='selbar';b.className='selbar glassw';document.body.appendChild(b);}

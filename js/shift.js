@@ -12,11 +12,11 @@ const inkOn=h=>lumOf(h)>.36?'#10202A':'#FFFFFF';
 const DEFAULT_CODES=[
  {code:'DO',name:'Day Off',type:'off'},{code:'AL',name:'Annual Leave',type:'leave'},{code:'SL',name:'Sick Leave',type:'leave'},{code:'TL',name:'Training Leave',type:'leave'},
  {code:'M1',name:'Morning 1',type:'work',start:'07:00',end:'16:00'},{code:'M3',name:'Morning 3',type:'work',start:'07:00',end:'16:00'},
- {code:'M5',name:'Morning 5',type:'work',start:'07:30',end:'16:30'},{code:'M6',name:'Morning 6',type:'work',start:'09:00',end:'17:00',legend:true},
+ {code:'M5',name:'Morning 5',type:'work',start:'07:30',end:'16:30'},{code:'M6',name:'Morning 6',type:'work',start:'09:00',end:'18:00'},
  {code:'S1',name:'Day 1',type:'work',start:'07:00',end:'16:00'},{code:'S3',name:'Day 3',type:'work',start:'07:00',end:'16:00'},
- {code:'S10',name:'Day 10',type:'work',start:'10:00',end:'18:00',legend:true},{code:'E11',name:'Evening 11',type:'work',start:'13:00',end:'22:00'},
- {code:'E1',name:'Evening 1',type:'work',start:'13:00',end:'22:00',legend:true},{code:'E10',name:'Evening 10',type:'work',start:'14:00',end:'22:00',legend:true},
- {code:'E',name:'Evening',type:'work',start:'20:00',end:'23:00',legend:true},{code:'N',name:'Night (overnight)',type:'work',start:'21:00',end:'06:00'},
+ {code:'S10',name:'Day 10',type:'work',start:'10:00',end:'19:00'},{code:'E11',name:'Evening 11',type:'work',start:'13:00',end:'22:00'},
+ {code:'E1',name:'Evening 1',type:'work',start:'13:00',end:'22:00'},{code:'E10',name:'Evening 10',type:'work',start:'14:00',end:'23:00'},
+ {code:'E',name:'Evening',type:'work',start:'20:00',end:'05:00'},{code:'N',name:'Night (overnight)',type:'work',start:'21:00',end:'06:00'},
  {code:'BDL',name:'Business Duty',type:'duty'}];
 /* pre-3.6.1 guessed defaults (8 h etc.) → migrated to 9 h once */
 const OLD_GUESS={M1:'07:00-15:00',M3:'07:00-15:30',M5:'07:30-15:30',S1:'07:00-19:00',S3:'07:00-15:00',E11:'13:00-21:00',N:'21:00-07:00'};
@@ -29,7 +29,10 @@ function hours(c){if(!c||!c.start)return 0;if(!c.end)return c.len||DEFAULT_LEN;l
 const isWork=c=>!!(c&&c.start&&(c.type==='work'||c.type==='duty'));
 function at(dayDate,t){const d=new Date(dayDate);d.setHours(0,0,0,0);d.setMinutes(mins(t));return d;}
 function window_(dayDate,c){const s=at(dayDate,c.start);const e=new Date(s.getTime()+hours(c)*3600e3);return{start:s,end:e};}
-function lookup(codes,code){if(!code)return null;const u=String(code).toUpperCase();const c=codes.find(c=>c.code.toUpperCase()===u)||null;return c&&c.start&&!c.end&&(c.type==='work'||c.type==='duty')?{...c,end:addH(c.start,c.len||DEFAULT_LEN),endAuto:true}:c;}
+/* 3.7: every work shift is start + 9 h unless the user explicitly edited that code (userSet) — legend-imported times included */
+const norm9=c=>c&&c.start&&(c.type==='work'||c.type==='duty')&&!c.userSet?{...c,end:addH(c.start,c.len||DEFAULT_LEN)}:c;
+function migrate97(codes){let n=0;const out=(codes||[]).map(c=>{const x=norm9(c);if(x!==c&&x.end!==c.end)n++;if(x&&x.legend){delete x.legend;}return x;});return{codes:out,changed:n};}
+function lookup(codes,code){if(!code)return null;const u=String(code).toUpperCase();const c=norm9(codes.find(c=>c.code.toUpperCase()===u)||null);return c&&c.start&&!c.end&&(c.type==='work'||c.type==='duty')?{...c,end:addH(c.start,c.len||DEFAULT_LEN),endAuto:true}:c;}
 /** current state at `now` given roster map {YYYY-MM-DD: code} */
 function current(now,roster,codes=DEFAULT_CODES){now=new Date(now);const today=new Date(now);today.setHours(0,0,0,0);const y=new Date(today);y.setDate(y.getDate()-1);
  const res={now,todayCode:roster[key(today)]||null};
@@ -137,4 +140,4 @@ function parseRows(rows,codes=DEFAULT_CODES,{aligned=false,ocr=false,extra=[]}={
 function textToRows(text){return String(text).split(/\r?\n/).map(l=>l.replace(/[|¦]/g,' ').split(/\t|\s{1,}/).filter(Boolean)).filter(r=>r.length);}
 function matchRow(rows,profile){if(!profile||!rows.length)return -1;const nm=(profile.name||'').toLowerCase().split(/\s+/).filter(w=>w.length>1);const id=(profile.staffId||'').toLowerCase().replace(/[^a-z0-9]/g,'');
  let best=-1,bs=0;rows.forEach((r,i)=>{const l=r.label.toLowerCase();let s=0;if(id&&l.replace(/[^a-z0-9]/g,'').includes(id))s+=10;nm.forEach(w=>{if(l.includes(w))s+=2;});if(s>bs){bs=s;best=i;}});return bs>=2?best:-1;}
-return{COLORS,inkOn,lumOf,get DEFAULT_LEN(){return DEFAULT_LEN;},setDefaultLen(h){if(h>0&&h<=24)DEFAULT_LEN=+h;},addH,migrate9,fuzzyCode,parseLegend,codeByTime,fillHeader,splitLabel,DEFAULT_CODES,key,mins,hours,isWork,lookup,current,nextShift,stats,reminderTimes,parseRows,textToRows,matchRow,norm,dayOf};});
+return{COLORS,inkOn,lumOf,get DEFAULT_LEN(){return DEFAULT_LEN;},setDefaultLen(h){if(h>0&&h<=24)DEFAULT_LEN=+h;},addH,migrate9,migrate97,norm9,fuzzyCode,parseLegend,codeByTime,fillHeader,splitLabel,DEFAULT_CODES,key,mins,hours,isWork,lookup,current,nextShift,stats,reminderTimes,parseRows,textToRows,matchRow,norm,dayOf};});
