@@ -3,13 +3,12 @@
 (function(){'use strict';const A=window.AHV;const $=A.$,$$=A.$$,esc=A.esc;
 const RM=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
 /* ---------- 1. roster shift colours sampled from the user's Excel roster (Sept 2026 sheet) ---------- */
-const CC={DO:'#0870C8',M1:'#B4E2F8',E11:'#A9DCF5',AL:'#F8F050',N:'#B8F848',M3:'#F848F8',M5:'#F7EFCF',S1:'#FAF2C8',S3:'#F5EED6',TL:'#FB9BE3',
- M6:'#C27CF9',SL:'#62E0FD',E:'#D3B2FD',S10:'#B3F399',E1:'#5FF7BB',E10:'#8FE9FB',BDU:'#F8F0A0'};
+const SHX=window.AHVShift;const CC=SHX.COLORS;
 A.CODE_COLORS=CC;
-const lum=h=>{const n=parseInt(h.slice(1),16),c=[n>>16,(n>>8)&255,n&255].map(v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);});return .2126*c[0]+.7152*c[1]+.0722*c[2];};
-A.codeColor=code=>{code=String(code||'').trim().toUpperCase();const user=(A.S.codes||[]).find(c=>c.code===code&&c.color);return user?user.color:CC[code]||null;};
+const lum=SHX.lumOf;
+A.codeColor=code=>{code=String(code||'').trim().toUpperCase();if(!code)return null;const user=(A.S.codes||[]).find(c=>c.code===code&&c.color);return user?user.color:CC[code]||null;};
 function paintCodes(root){$$('.codechip,.codebig,.weekstrip .wd .c,.codepick button,.rcell,[data-code]',root||document).forEach(el=>{const code=(el.dataset.code||el.textContent).trim();const c=A.codeColor(code);
- if(!c){if(el.classList.contains('cc'))el.classList.remove('cc');return;}if(el.style.getPropertyValue('--cc')===c)return;el.classList.add('cc');el.style.setProperty('--cc',c);el.style.setProperty('--ccf',lum(c)>.36?'#10202A':'#FFFFFF');});}
+ if(!c){if(el.classList.contains('shc'))el.classList.remove('shc');return;}if(el.style.getPropertyValue('--cc')===c)return;el.classList.add('shc');el.style.setProperty('--cc',c);el.style.setProperty('--ccf',SHX.inkOn(c));});}
 A.paintCodes=paintCodes;let pq=0;new MutationObserver(()=>{if(pq)return;pq=requestAnimationFrame(()=>{pq=0;paintCodes();});}).observe(document.body,{childList:true,subtree:true});
 /* ---------- 2. Dynamic-Island pill ---------- */
 const isl=document.createElement('button');isl.id='island';isl.type='button';isl.setAttribute('aria-label','Live status — tap to switch');isl.innerHTML='<span class="idot"></span><span class="itx"></span>';
@@ -130,5 +129,13 @@ async function dissolve(cards){if(!cards.length)return;if(RM()){cards.forEach(c=
  await new Promise(r=>setTimeout(r,340));}
 A.dissolve=dissolve;
 /* ---------- go hook ---------- */
-A.afterGo=function(tab){if(tab!=='patients'&&sel){sel=null;selBar();}requestAnimationFrame(tabIndicator);paintCodes();islandTick();};
+function shiftForProfile(){const S=A.S,SH=SHX;const c=A.shiftNow&&A.shiftNow();if(c&&c.shift&&(c.state==='on'||c.state==='before'))return c.shift.code;const t=(S.roster||{})[A.todayKey()];if(t)return t;const n=c&&c.next;return n?n.shift.code:null;}
+A.shiftForProfile=shiftForProfile;
+function tintViews(){const code=shiftForProfile(),col=A.codeColor(code);
+ const np=$('.namepanel');if(np){if(col){np.classList.add('shtint');np.style.setProperty('--pc',col);np.style.setProperty('--pcf',SHX.inkOn(col));np.dataset.shift=code;}else{np.classList.remove('shtint');delete np.dataset.shift;}}
+ const sc=$('.shiftcard');const cur=A.shiftNow&&A.shiftNow();const sc_col=cur&&cur.shift&&A.codeColor(cur.shift.code);if(sc){if(sc_col){sc.classList.add('shtint');sc.style.setProperty('--pc',sc_col);}else sc.classList.remove('shtint');}
+ $$('.daycard').forEach(d=>{const k=d.dataset.k,cd=(A.S.roster||{})[k];if(cd)d.dataset.code=cd;});paintCodes();
+ const ic=cur&&cur.shift&&A.codeColor(cur.shift.code);if(ic)isl.style.setProperty('--ic',ic);else isl.style.removeProperty('--ic');}
+A.tintViews=tintViews;
+A.afterGo=function(tab){requestAnimationFrame(tintViews);if(tab!=='patients'&&sel){sel=null;selBar();}requestAnimationFrame(tabIndicator);paintCodes();islandTick();};
 })();

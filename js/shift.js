@@ -1,23 +1,35 @@
 /*! Al Hili Vitals — roster/shift logic. Copyright (c) 2026 Abdalla Abbadi. All rights reserved. */
 (function(root,f){const m=f();if(typeof module==='object'&&module.exports)module.exports=m;else root.AHVShift=m;})(this,function(){
 'use strict';
+/* 3.6.1: shifts are 9 hours. Codes without roster-legend times default to start + 9 h (no break is subtracted anywhere).
+   Codes with explicit legend times (e.g. M6 09:00–17:00) keep those times exactly. */
+let DEFAULT_LEN=9;
+/* ONE shared shift-colour map (sampled from the user's Excel roster, Sept 2026) — used by every view: chips, day cards, profile, home tile, island */
+const COLORS={DO:'#0870C8',M1:'#B4E2F8',E11:'#A9DCF5',AL:'#F8F050',N:'#B8F848',M3:'#F848F8',M5:'#F7EFCF',S1:'#FAF2C8',S3:'#F5EED6',TL:'#FB9BE3',
+ M6:'#C27CF9',SL:'#62E0FD',E:'#D3B2FD',S10:'#B3F399',E1:'#5FF7BB',E10:'#8FE9FB',BDU:'#F8F0A0'};
+const lumOf=h=>{const n=parseInt(String(h).slice(1),16),c=[n>>16,(n>>8)&255,n&255].map(v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);});return .2126*c[0]+.7152*c[1]+.0722*c[2];};
+const inkOn=h=>lumOf(h)>.36?'#10202A':'#FFFFFF';
 const DEFAULT_CODES=[
  {code:'DO',name:'Day Off',type:'off'},{code:'AL',name:'Annual Leave',type:'leave'},{code:'SL',name:'Sick Leave',type:'leave'},{code:'TL',name:'Training Leave',type:'leave'},
- {code:'M1',name:'Morning 1',type:'work',start:'07:00',end:'15:00'},{code:'M3',name:'Morning 3',type:'work',start:'07:00',end:'15:30'},
- {code:'M5',name:'Morning 5',type:'work',start:'07:30',end:'15:30'},{code:'M6',name:'Morning 6',type:'work',start:'09:00',end:'17:00'},
- {code:'S1',name:'Long Day (12h)',type:'work',start:'07:00',end:'19:00'},{code:'S3',name:'Day 3',type:'work',start:'07:00',end:'15:00'},
- {code:'S10',name:'Day 10',type:'work',start:'10:00',end:'18:00'},{code:'E11',name:'Evening 11',type:'work',start:'13:00',end:'21:00'},
- {code:'E1',name:'Evening 1',type:'work',start:'13:00',end:'22:00'},{code:'E10',name:'Evening 10',type:'work',start:'14:00',end:'22:00'},
- {code:'E',name:'Evening',type:'work',start:'15:00',end:'23:00'},{code:'N',name:'Night (overnight)',type:'work',start:'21:00',end:'07:00'},
+ {code:'M1',name:'Morning 1',type:'work',start:'07:00',end:'16:00'},{code:'M3',name:'Morning 3',type:'work',start:'07:00',end:'16:00'},
+ {code:'M5',name:'Morning 5',type:'work',start:'07:30',end:'16:30'},{code:'M6',name:'Morning 6',type:'work',start:'09:00',end:'17:00',legend:true},
+ {code:'S1',name:'Day 1',type:'work',start:'07:00',end:'16:00'},{code:'S3',name:'Day 3',type:'work',start:'07:00',end:'16:00'},
+ {code:'S10',name:'Day 10',type:'work',start:'10:00',end:'18:00',legend:true},{code:'E11',name:'Evening 11',type:'work',start:'13:00',end:'22:00'},
+ {code:'E1',name:'Evening 1',type:'work',start:'13:00',end:'22:00',legend:true},{code:'E10',name:'Evening 10',type:'work',start:'14:00',end:'22:00',legend:true},
+ {code:'E',name:'Evening',type:'work',start:'20:00',end:'23:00',legend:true},{code:'N',name:'Night (overnight)',type:'work',start:'21:00',end:'06:00'},
  {code:'BDL',name:'Business Duty',type:'duty'}];
+/* pre-3.6.1 guessed defaults (8 h etc.) → migrated to 9 h once */
+const OLD_GUESS={M1:'07:00-15:00',M3:'07:00-15:30',M5:'07:30-15:30',S1:'07:00-19:00',S3:'07:00-15:00',E11:'13:00-21:00',N:'21:00-07:00'};
+function migrate9(codes){let n=0;const out=(codes||[]).map(c=>{if(c&&c.type==='work'&&!c.legend&&OLD_GUESS[c.code]===c.start+'-'+c.end){const d=DEFAULT_CODES.find(x=>x.code===c.code);n++;return{...c,name:c.code==='S1'&&/12h/.test(c.name)?'Day 1':c.name,end:d.end};}return c;});return{codes:out,changed:n};}
+const addH=(t,h)=>{const m=(((mins(t)+Math.round(h*60))%1440)+1440)%1440;return p2(Math.floor(m/60))+':'+p2(m%60);};
 const p2=n=>String(n).padStart(2,'0');
 const key=d=>d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
 const mins=t=>{const[h,m]=String(t).split(':').map(Number);return h*60+m;};
-function hours(c){if(!c||!c.start||!c.end)return 0;let d=mins(c.end)-mins(c.start);if(d<=0)d+=1440;return d/60;}
-const isWork=c=>!!(c&&c.start&&c.end&&(c.type==='work'||c.type==='duty'));
+function hours(c){if(!c||!c.start)return 0;if(!c.end)return c.len||DEFAULT_LEN;let d=mins(c.end)-mins(c.start);if(d<=0)d+=1440;return d/60;}
+const isWork=c=>!!(c&&c.start&&(c.type==='work'||c.type==='duty'));
 function at(dayDate,t){const d=new Date(dayDate);d.setHours(0,0,0,0);d.setMinutes(mins(t));return d;}
 function window_(dayDate,c){const s=at(dayDate,c.start);const e=new Date(s.getTime()+hours(c)*3600e3);return{start:s,end:e};}
-function lookup(codes,code){if(!code)return null;const u=String(code).toUpperCase();return codes.find(c=>c.code.toUpperCase()===u)||null;}
+function lookup(codes,code){if(!code)return null;const u=String(code).toUpperCase();const c=codes.find(c=>c.code.toUpperCase()===u)||null;return c&&c.start&&!c.end&&(c.type==='work'||c.type==='duty')?{...c,end:addH(c.start,c.len||DEFAULT_LEN),endAuto:true}:c;}
 /** current state at `now` given roster map {YYYY-MM-DD: code} */
 function current(now,roster,codes=DEFAULT_CODES){now=new Date(now);const today=new Date(now);today.setHours(0,0,0,0);const y=new Date(today);y.setDate(y.getDate()-1);
  const res={now,todayCode:roster[key(today)]||null};
@@ -125,4 +137,4 @@ function parseRows(rows,codes=DEFAULT_CODES,{aligned=false,ocr=false,extra=[]}={
 function textToRows(text){return String(text).split(/\r?\n/).map(l=>l.replace(/[|¦]/g,' ').split(/\t|\s{1,}/).filter(Boolean)).filter(r=>r.length);}
 function matchRow(rows,profile){if(!profile||!rows.length)return -1;const nm=(profile.name||'').toLowerCase().split(/\s+/).filter(w=>w.length>1);const id=(profile.staffId||'').toLowerCase().replace(/[^a-z0-9]/g,'');
  let best=-1,bs=0;rows.forEach((r,i)=>{const l=r.label.toLowerCase();let s=0;if(id&&l.replace(/[^a-z0-9]/g,'').includes(id))s+=10;nm.forEach(w=>{if(l.includes(w))s+=2;});if(s>bs){bs=s;best=i;}});return bs>=2?best:-1;}
-return{fuzzyCode,parseLegend,codeByTime,fillHeader,splitLabel,DEFAULT_CODES,key,mins,hours,isWork,lookup,current,nextShift,stats,reminderTimes,parseRows,textToRows,matchRow,norm,dayOf};});
+return{COLORS,inkOn,lumOf,get DEFAULT_LEN(){return DEFAULT_LEN;},setDefaultLen(h){if(h>0&&h<=24)DEFAULT_LEN=+h;},addH,migrate9,fuzzyCode,parseLegend,codeByTime,fillHeader,splitLabel,DEFAULT_CODES,key,mins,hours,isWork,lookup,current,nextShift,stats,reminderTimes,parseRows,textToRows,matchRow,norm,dayOf};});
