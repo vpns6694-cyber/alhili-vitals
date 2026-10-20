@@ -108,15 +108,17 @@ function viewerBase(){const o=localStorage.getItem('ahv_viewer_base');if(o)retur
 function docOf(sc,l){const n=S.profile||{};const t=Date.now();return{id:A.uid().slice(0,10),t,school:{esis:sc.esis||'',name:sc.name},nurse:{name:n.name||'',id:n.staffId||''},clinic:'Al Hili Clinic',
  rows:l.map(p=>({name:p.name,mrn:p.mrn||'',age:p.age,sys:p.sys,dia:p.dia,pr:p.pr,temp:p.temp,rr:p.rr,spo2:p.spo2,time:p.updated||(p.sys!=null||p.pr!=null||p.temp!=null?p.ts:null),xfer:!!p.xfer}))};}
 async function buildForm(sc,l){const F=window.AHVForm,Q=window.AHVDoc;const doc=docOf(sc,l);if(!doc.nurse.id)throw new Error('Add your employee ID in Settings › Profile first — it is the key that opens the QR.');
- const pl=await Q.plan(doc,doc.nurse.id,viewerBase());const tile=await F.loadImg(A.AS('img/seha-tile.png'));
- const qrs=pl.urls.map((u,i)=>Q.drawQR(u,640,tile,pl.urls.length>1?`Part ${i+1} of ${pl.urls.length}`:'Scan to verify'));
- const [cl,sl,sg]=await Promise.all([F.loadImg(A.LOGO),F.loadImg(logoOf(sc)),F.loadImg(S.profile&&S.profile.signature)]);
- const pages=F.draw(pl.mode==='summary'?{...doc,summary:true}:doc,{clinicLogo:cl,schoolLogo:sl,signature:sg,qrs,version:A.VERSION});return{doc,pl,pages,qrs};}
+ const pl=await Q.plan(doc,doc.nurse.id,viewerBase());const pr=S.profile||{};
+ const [cl,sl,sg,ph]=await Promise.all([F.loadImg(A.LOGO),F.loadImg(logoOf(sc)),F.loadImg(pr.signature),F.loadImg(pr.photo)]);
+ const qr=Q.drawQR(pl.urls[0],Math.round(580*4/3),null);
+ const qrInfo=`QR version ${pl.versions[0]} · error correction ${pl.ec} · ${pl.stats.rows} records · AES-256 encrypted`;
+ const pages=F.draw(pl.mode==='summary'?{...doc,summary:true}:doc,{clinicLogo:cl,schoolLogo:sl,signature:sg,nursePhoto:ph,qrs:[qr],qrInfo,version:A.VERSION});return{doc,pl,pages,qrs:[qr]};}
 async function formSheet(sc,l){const close=A.sheet('Official school form',`<div id="fm"><div class="prog"><i style="width:40%"></i></div><div class="small">Encrypting and drawing the form…</div></div>`);
- try{const r=await buildForm(sc,l);A._lastForm=r;const m=$('#fm');
+ try{const r=await buildForm(sc,l);A._lastForm=r;const m=$('#fm');const pdf=new File([AHVForm.pdf(r.pages)],fname(sc,'pdf'),{type:'application/pdf'});r.pdf=pdf;const pu=URL.createObjectURL(pdf);
   m.innerHTML=`<div class="fmprev">${r.pages.map((c,i)=>`<img src="${c.toDataURL('image/jpeg',.7)}" alt="Form page ${i+1}">`).join('')}</div>
-  <div class="small fminfo" id="fm-info">QR: <b>${r.pl.mode==='full'?'full record':r.pl.mode==='split'?r.pl.urls.length+' linked codes':'summary only'}</b> · version ${r.pl.versions.join(', ')} (EC level H) · ${r.pl.stats.rows} students · ${r.pl.stats.jsonBytes} B JSON → ${r.pl.stats.deflated} B deflated · encrypted with your employee ID (PBKDF2 310k + salt) — nothing is uploaded.</div>
-  <div class="sfoot"><button class="btn" id="fm-print">${A.I.print} Print</button><button class="btn p" id="fm-pdf">${A.I.pdf} Download PDF</button></div>`;
-  $('#fm-pdf').onclick=()=>A.Export.deliver([new File([AHVForm.pdf(r.pages)],fname(sc,'pdf'),{type:'application/pdf'})],false);$('#fm-print').onclick=()=>AHVForm.print(r.pages,sc.name);
+  <div class="small fminfo" id="fm-info">One QR code: <b>${r.pl.mode==='full'?'full record':'summary only'}</b> · version ${r.pl.versions[0]} (EC level ${r.pl.ec}) · ${r.pl.stats.rows} students · ${r.pl.stats.packed} B packed → ${r.pl.stats.deflated} B compressed · encrypted with your employee ID — nothing is uploaded.</div>
+  <div class="sfoot"><button class="btn" id="fm-print">${A.I.print} Print</button><button class="btn p" id="fm-pdf">${A.I.pdf} Download PDF</button></div>
+  <p class="small" style="text-align:center;margin-top:8px">Nothing happened? <a id="fm-open" href="${pu}" target="_blank" rel="noopener" download="${esc(pdf.name)}">Open the PDF</a></p>`;
+  $('#fm-pdf').onclick=()=>A.Export.deliver([pdf],false);$('#fm-print').onclick=()=>AHVForm.print(r.pages,sc.name);
  }catch(e){$('#fm').innerHTML=`<p class="err">${esc(e.message||String(e))}</p>`;}}
 A.School={search,SCH,tsv,tsvRow,cols,exportCSV,exportXLSX,exportJSON,TPL,buildForm,docOf,viewerBase,nextPending,curSchool};})();

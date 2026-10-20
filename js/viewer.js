@@ -52,11 +52,12 @@ function stepPin(){step.innerHTML=`<h1>Enter the nurse's employee ID</h1><p>The 
 const loadImg=src=>new Promise(r=>{if(!src)return r(null);const i=new Image();i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src;});
 async function showDoc(doc){V.doc=doc;$('#card').classList.add('doc');const row=(window.AHVSchools.rows||[]).find(r=>r[0]===(doc.school&&doc.school.esis));
  const [cl,sl]=await Promise.all([loadImg('icons/logo-900.png'),loadImg(row&&row[6]?row[6]:null)]);
- const pages=F.draw(doc.summary?{...doc}:doc,{clinicLogo:cl,schoolLogo:sl,signature:null,qrs:[],version:'3.5 viewer'});V.pages=pages;
+ const pages=F.draw(doc.summary?{...doc}:doc,{clinicLogo:cl,schoolLogo:sl,signature:null,qrs:[],version:'3.8.1 viewer'});V.pages=pages;
  const s=doc.summary;const n=doc.rows.length;
  step.innerHTML=`<h1>${esc(doc.school&&doc.school.name)}</h1><div class="meta"><div><b>${esc(doc.nurse&&doc.nurse.name)}</b>Nurse · ID ${esc(doc.nurse&&doc.nurse.id)}</div><div><b>${new Date(doc.t).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'})}</b>Form created</div>
   <div><b>${s?s.total:n}</b>Students</div><div><b>${s?s.flagged+' flagged':doc.rows.filter(r=>r.xfer).length+' transferred'}</b>${s?'Summary only — full list on the printed form':'to the SEHA system'}</div></div>
   <div class="row"><button class="btn p" id="dpdf">Download PDF</button><button class="btn g" id="dprint">Print</button></div>
+  <details class="slist" open><summary>${n} student${n===1?'':'s'} in this record</summary><ol>${doc.rows.map(r=>`<li><b>${esc(r.name)}</b><span>${r.sys!=null&&r.dia!=null?r.sys+'/'+r.dia:'—'} · ${r.pr??'—'} bpm · ${r.temp!=null?(+r.temp).toFixed(1)+' °C':'—'} · ${r.spo2!=null?r.spo2+'%':'—'}${r.xfer?' · sent':''}</span></li>`).join('')}</ol></details>
   <div class="pages">${pages.map((c,i)=>`<img src="${c.toDataURL('image/jpeg',.82)}" alt="Page ${i+1}">`).join('')}</div>
   <div class="small" style="margin-top:10px">Decrypted on this device only. The signature is on the printed original. ${V.presence==='face'?'Presence snapshot stored in this device’s encrypted access log.':''}</div>
   <div style="text-align:center"><button class="link" id="dlog">Access log on this device</button></div><div class="log hidden" id="logv"></div>`;
