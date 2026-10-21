@@ -36,7 +36,7 @@
  font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,Helvetica,Arial,sans-serif}
 @media (min-width:414px){:root{--g:20px}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--text);font:var(--t-body);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;-webkit-text-size-adjust:100%}
+html,body{margin:0;background:var(--bg);color:var(--text);font:var(--t-body);-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
 button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer}
 h1,h2,h3{margin:0}
 .hidden{display:none!important}
@@ -1008,7 +1008,10 @@ html.devmode #island{cursor:pointer}
 #dplayer[data-state=loading] #dp-st{color:#b25000}
 @media (prefers-reduced-motion:reduce){#dplayer .dp-liveline::after{animation:none}}
 /* 3.9.1 no accidental zoom on iPhone */
-html,body{overscroll-behavior:none;max-width:100%;overflow-x:hidden}
+/* 3.9.2: body must NOT become a scroll container (overflow-x:hidden did that, and with overscroll-behavior:none it swallowed every touch scroll). clip hides sideways overflow without creating a scroller. */
+/* no overscroll-behavior on the root: WebKit then refuses to scroll the page */
+body{max-width:100%;overflow-x:clip}
+.sbody,.modal,.onb,.rvwrap,[data-scroll]{-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation}
 a,button,input,select,textarea,label,[role=button],.cell,.btn{touch-action:manipulation}
 input,select,textarea{font-size:max(16px,1em)!important}
