@@ -2,7 +2,7 @@
     Local-only: all data in IndexedDB on this device. No network calls, no analytics. */
 (function(){
 'use strict';
-const VERSION='3.9.0';
+const VERSION='3.9.1';
 const COPY='Copyright (c) 2026 Abdalla Abbadi. All rights reserved.';
 const EMAIL='a.abbadi@edcad.ae';
 const AS=n=>(window.__ASSETS__&&window.__ASSETS__[n])||n;

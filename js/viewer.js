@@ -71,3 +71,6 @@ try{if('serviceWorker' in navigator&&location.protocol!=='file:')navigator.servi
  V.token=await collect();if(!V.token){const p=V.partsState;step.innerHTML=`<h1>Part ${V.frag.part} of ${p.of} saved</h1><p>This form has ${p.of} linked QR codes. Scan the remaining code${p.of-p.got>1?'s':''} with this same phone — the parts are kept on this device only.</p><div class="parts">${[...Array(p.of)].map((_,i)=>`<i class="${p.have.includes(i+1)?'on':''}"></i>`).join('')}</div><p class="small">${p.got} of ${p.of} scanned</p>`;return;}
  stepCamera();})();
 })();
+/* 3.9.1: block pinch / double-tap zoom (iOS ignores user-scalable=no) */
+['gesturestart','gesturechange','gestureend'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
+document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault();},{passive:false});

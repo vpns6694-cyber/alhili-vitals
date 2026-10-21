@@ -87,38 +87,68 @@ function safeText(t,fb){t=String(t==null?'':t).normalize('NFC').replace(/[\u0000
  if(!t||BAD.test(t)||!/^[\p{L}\p{M}\p{N} .,:'’·\-–—()&/+]{1,80}$/u.test(t))return fb||'';return t;}
 A.safeText=safeText;
 const ART=A.AS?A.AS('icons/icon-512.png'):'icons/icon-512.png';
-const au=document.createElement('audio');au.id='dp-audio';au.preload='none';au.setAttribute('playsinline','');au.setAttribute('webkit-playsinline','');au.crossOrigin='anonymous';document.body.appendChild(au);
+/* 3.9.1 playback core — ONE persistent <audio> element for the life of the page (never recreated, never removed).
+   Root causes fixed from 3.9.0: (1) every 'stalled' event (normal for HLS on iOS) and every 'error' (including the one fired when hls.js
+   was destroyed) re-assigned the source → audible stutter and a reconnect loop; (2) retry timers kept calling attach()/play() while the
+   user pressed Play, aborting each other; (3) background play() attempts rejected by iOS kept the loop alive. Now: native HLS whenever the
+   browser can play it (iOS/macOS Safari), hls.js only where MSE is the only option, a progress watchdog instead of 'stalled', one
+   reconnect timer with backoff, and the UI is never closed by playback problems. */
+const au=document.getElementById('dp-audio')||document.createElement('audio');au.id='dp-audio';au.preload='none';au.setAttribute('playsinline','');au.setAttribute('webkit-playsinline','');au.setAttribute('x-webkit-airplay','allow');if(!au.isConnected)document.body.appendChild(au);
+window.__ahvAudio=au;
 let src=SRC[new Date().getHours()<12?0:1],ti=0,hls=null,open=false,state='idle',err='';
 const isLive=()=>!!src.live;
+/* native HLS only on Apple WebKit (AVFoundation) or when MSE is missing; Chrome/Samsung report 'maybe' for HLS but their native path is the flaky one → hls.js */
+const APPLE=/iP(hone|ad|od)|Macintosh/.test(navigator.userAgent)&&!/Chrome|CriOS|Android|Edg|Firefox|FxiOS/.test(navigator.userAgent)||/CriOS|FxiOS/.test(navigator.userAgent);
+const NATIVE_HLS=()=>!!au.canPlayType('application/vnd.apple.mpegurl')&&(APPLE||(!window.MediaSource&&!window.ManagedMediaSource));
 function loadHls(){return window.Hls?Promise.resolve(window.Hls):new Promise((res,rej)=>{const s=document.createElement('script');s.src='vendor/hls/hls.light.min.js';s.onload=()=>res(window.Hls);s.onerror=rej;document.head.appendChild(s);});}
-async function attach(){if(hls){hls.destroy();hls=null;}err='';
- if(!isLive()){au.removeAttribute('crossorigin');au.src=src.tracks[ti].u;return;}
- au.crossOrigin='anonymous';
- if(au.canPlayType('application/vnd.apple.mpegurl')){au.src=src.live;return;}
- const H=await loadHls();if(H&&H.isSupported()){hls=new H({lowLatencyMode:false,maxBufferLength:20,enableID3MetadataCues:false,enableEmsgMetadataCues:false,enableWebVTT:false,enableIMSC1:false,enableCEA708Captions:false,renderTextTracksNatively:false});hls.on(H.Events.ERROR,(e,d)=>{if(d.fatal){err='Stream unavailable — reconnecting';state='error';render();reconnect('hls');}});hls.loadSource(src.live);hls.attachMedia(au);}
- else au.src=src.live;}
-let want=false,retry=0,rt=0;
+let gen=0;              /* attach generation: stale async work from an older attach is ignored */
+let detaching=false;    /* errors raised while we tear a source down are ours, not the stream's */
+function detach(){detaching=true;if(hls){try{hls.destroy();}catch(_){}hls=null;}if(au.getAttribute('src')){au.removeAttribute('src');try{au.load();}catch(_){}}setTimeout(()=>detaching=false,0);}
+async function attach(){const g=++gen;detach();err='';
+ if(!isLive()){au.removeAttribute('crossorigin');au.src=src.tracks[ti].u;return g;}
+ if(NATIVE_HLS()){au.removeAttribute('crossorigin');au.src=src.live;return g;}      /* iOS: native HLS (AVFoundation), no MSE, no CORS mode needed */
+ au.crossOrigin='anonymous';const H=await loadHls().catch(()=>null);if(g!==gen)return g;
+ if(H&&H.isSupported()){hls=new H({lowLatencyMode:false,liveSyncDurationCount:4,liveMaxLatencyDurationCount:12,maxBufferLength:40,maxMaxBufferLength:90,backBufferLength:30,
+   manifestLoadingMaxRetry:6,levelLoadingMaxRetry:6,fragLoadingMaxRetry:8,fragLoadingRetryDelay:800,manifestLoadingRetryDelay:800,levelLoadingRetryDelay:800,
+   enableID3MetadataCues:false,enableEmsgMetadataCues:false,enableWebVTT:false,enableIMSC1:false,enableCEA708Captions:false,renderTextTracksNatively:false,enableWorker:true});
+  const me=hls;hls.on(H.Events.ERROR,(e,d)=>{if(me!==hls||!d.fatal)return;
+   if(d.type===H.ErrorTypes.NETWORK_ERROR){try{me.startLoad();}catch(_){}reconnect('hls-net',4000);}
+   else if(d.type===H.ErrorTypes.MEDIA_ERROR){try{me.recoverMediaError();}catch(_){reconnect('hls-media');}}
+   else reconnect('hls-fatal');});
+  hls.loadSource(src.live);hls.attachMedia(au);}
+ else au.src=src.live;return g;}
+let want=false,retry=0,rt=0,lastT=-1,lastMove=0,blocked=false;
+function setState(s,m){state=s;err=m||'';render();}
 const P={
- async play(){want=true;try{if(!au.src&&!hls)await attach();state='loading';render();await au.play();}catch(e){state='error';err=e&&e.name==='NotAllowedError'?'Tap play to start':'Could not start playback';render();}},
- pause(){want=false;au.pause();},
- toggle(){au.paused?P.play():P.pause();},
- stop(){want=false;clearTimeout(rt);au.pause();if(hls){hls.destroy();hls=null;}au.removeAttribute('src');au.load();state='idle';render();meta();},
- async pick(id){const s=SRC.find(x=>x.id===id);if(!s)return;const was=!au.paused||state==='loading';P.stop();src=s;ti=0;await attach();render();meta();if(was||true)P.play();},
+ async play(){want=true;blocked=false;clearTimeout(rt);
+  try{if(state==='error'||(!au.getAttribute('src')&&!hls))await attach();setState(state==='playing'?'playing':'loading');lastMove=Date.now();await au.play();retry=0;}
+  catch(e){if(e&&e.name==='AbortError')return;if(e&&e.name==='NotAllowedError'){blocked=true;want=false;setState('paused','Tap play to resume');return;}reconnect('play-failed');}},
+ pause(){want=false;clearTimeout(rt);au.pause();},
+ toggle(){(au.paused||!want)?P.play():P.pause();},
+ stop(){want=false;clearTimeout(rt);retry=0;au.pause();detach();gen++;setState('idle');meta();},
+ async pick(id){const s=SRC.find(x=>x.id===id);if(!s)return;want=false;clearTimeout(rt);au.pause();src=s;ti=0;retry=0;await attach();render();meta();P.play();},
  async track(d){if(isLive())return;const n=src.tracks.length;ti=(ti+d+n)%n;await attach();meta();P.play();},
  seek(t){if(!isLive()&&isFinite(au.duration))au.currentTime=Math.max(0,Math.min(au.duration-.2,t));},
- open:()=>openPanel(),close:()=>closePanel(),get state(){return state;},get src(){return src;},get ti(){return ti;},audio:au};
+ open:()=>openPanel(),close:()=>closePanel(),get state(){return state;},get src(){return src;},get ti(){return ti;},get retries(){return retry;},audio:au};
 A.player=P;
-au.addEventListener('playing',()=>{state='playing';render();meta();});au.addEventListener('pause',()=>{if(state!=='idle')state='paused';render();});
-au.addEventListener('waiting',()=>{state='loading';render();});au.addEventListener('ended',()=>{if(!isLive()){if(ti<src.tracks.length-1)P.track(1);else{state='paused';ti=0;attach();render();}}});
-au.addEventListener('error',()=>{if(!au.getAttribute('src'))return;state='error';err='Source unavailable — check the connection';render();});
-au.addEventListener('timeupdate',()=>{prog();posState();retry=0;});
-/* reconnect: stalled/errored live streams and network changes re-attach the source while the user still wants audio */
-function reconnect(why){if(!want||document.visibilityState==='prerender')return;clearTimeout(rt);const d=Math.min(15000,1500*Math.pow(2,retry++));
- state='loading';err='Reconnecting…';render();rt=setTimeout(async()=>{if(!want)return;try{if(isLive()){await attach();}else{const t=au.currentTime;await attach();au.currentTime=t||0;}await au.play();}catch(e){reconnect('retry');}},d);}
-au.addEventListener('stalled',()=>{if(isLive())reconnect('stalled');});au.addEventListener('error',()=>reconnect('error'));
-addEventListener('online',()=>{if(want&&au.paused)reconnect('online');});
-if(navigator.connection&&navigator.connection.addEventListener)navigator.connection.addEventListener('change',()=>{if(want&&isLive())reconnect('network');});
-au.addEventListener('pause',()=>{if(want&&!document.hidden)return;});
+au.addEventListener('playing',()=>{retry=0;clearTimeout(rt);setState('playing');meta();});
+au.addEventListener('pause',()=>{if(state==='idle')return;if(!want){setState('paused');return;}
+ /* paused by the system (interruption, route change, background) while the user still wants audio: try to resume once, quietly */
+ setTimeout(()=>{if(want&&au.paused)au.play().catch(e=>{if(e&&e.name==='NotAllowedError'){want=false;setState('paused','Tap play to resume');}});},600);});
+au.addEventListener('waiting',()=>{if(want)setState('loading',retry?'Reconnecting…':'Buffering…');});
+au.addEventListener('ended',()=>{if(!isLive()){if(ti<src.tracks.length-1)P.track(1);else{want=false;ti=0;attach();setState('paused');}}else if(want)reconnect('ended');});
+au.addEventListener('error',()=>{if(detaching||!want||!au.error)return;reconnect('media-error');});
+au.addEventListener('timeupdate',()=>{prog();posState();if(au.currentTime!==lastT){lastT=au.currentTime;lastMove=Date.now();if(state!=='playing'&&!au.paused)setState('playing');}});
+/* one reconnect timer, exponential backoff 1.5 s → 20 s, retries forever while the user wants audio. Never closes or hides the player. */
+function reconnect(why,delay){if(!want)return;if(rt)return;const d=delay||(retry<10?Math.min(6000,1500*Math.pow(2,Math.min(retry,2))):20000);retry++;
+ setState('loading','Reconnecting…');P._last=why;
+ rt=setTimeout(async()=>{rt=0;if(!want)return;try{const t=isLive()?0:au.currentTime;const g=await attach();if(g!==gen||!want)return;if(t)au.currentTime=t;lastMove=Date.now();await au.play();}
+  catch(e){if(e&&e.name==='NotAllowedError'){want=false;setState('paused','Tap play to resume');return;}if(e&&e.name==='AbortError')return;reconnect('retry');}},d);}
+/* progress watchdog: a live stream that has not advanced for 15 s (while not paused) is reconnected; 'stalled' alone is NOT a reason */
+setInterval(()=>{if(!want||au.paused||rt)return;if(Date.now()-lastMove>10000)reconnect('watchdog',200);},2000);
+addEventListener('online',()=>{if(!want)return;clearTimeout(rt);rt=0;retry=0;if(Date.now()-lastMove>2500||au.paused)reconnect('online',300);});
+if(navigator.connection&&navigator.connection.addEventListener)navigator.connection.addEventListener('change',()=>{if(want&&isLive()&&Date.now()-lastMove>4000){clearTimeout(rt);rt=0;reconnect('network',500);}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&want&&au.paused)au.play().catch(()=>{});});
 /* MediaSession: lock-screen / Control Centre metadata and buttons */
 function meta(){if(!('mediaSession' in navigator))return;const t=safeText(isLive()?src.name:src.tracks[ti].t,'Al Hili Vitals');
  try{navigator.mediaSession.metadata=new MediaMetadata({title:isLive()?`${safeText(src.name,'Radio')} · Live`:`${t} — ${safeText(src.name,'')}`,artist:isLive()?safeText(src.sub,'Abu Dhabi Media'):'Mishary Rashid Alafasy',album:'Al Hili Vitals',artwork:[{src:new URL(ART,location.href).href,sizes:'512x512',type:'image/png'}]});}catch(_){}
@@ -145,9 +175,9 @@ function build(){const live=isLive(),t=live?null:src.tracks[ti];
  pn.style.setProperty('--hue',src.hue);
  pn.innerHTML=`<div class="dp-top"><div class="dp-art" aria-hidden="true"><span dir="rtl">${esc(src.ar)}</span></div><div class="dp-ttl"><b id="dp-t">${esc(safeText(live?src.name:t.t,'Now playing'))}</b><span id="dp-s">${esc(safeText(live?src.sub:src.name+' · '+(ti+1)+' of '+src.tracks.length,''))}</span></div>
   ${live?'<span class="dp-live" aria-label="Live"><i></i>LIVE</span>':''}<button class="dp-x" id="dp-close" aria-label="Collapse player"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
-  ${src.zikr?`<div class="dp-zikr" dir="rtl" lang="ar">${esc(src.zikr)}</div>`:''}
+  <div class="dp-zikr" dir="rtl" lang="ar" ${src.zikr?'':'aria-hidden="true"'}>${src.zikr?esc(src.zikr):''}</div>
   <div class="dp-wave" aria-hidden="true">${Array.from({length:42},(_,i)=>`<i style="--h:${(0.28+0.72*Math.abs(Math.sin(i*1.7)*Math.cos(i*.53))).toFixed(2)};--d:${(i%7)*.09}s"></i>`).join('')}</div>
-  ${live?'<div class="dp-times"><span>Live stream</span><span id="dp-st"></span></div>':`<input type="range" id="dp-seek" min="0" max="1000" value="0" aria-label="Seek"><div class="dp-times"><span id="dp-el">0:00</span><span id="dp-st"></span><span id="dp-du">--:--</span></div>`}
+  <div class="dp-meter">${live?'<div class="dp-liveline" aria-hidden="true"></div>':'<input type="range" id="dp-seek" min="0" max="1000" value="0" aria-label="Seek">'}</div>${live?'<div class="dp-times"><span>Live stream</span><span id="dp-st" role="status"></span><span></span></div>':`<div class="dp-times"><span id="dp-el">0:00</span><span id="dp-st" role="status"></span><span id="dp-du">--:--</span></div>`}
   <div class="dp-ctl"><button id="dp-prev" aria-label="${live?'Previous source':'Previous'}">${I.prev}</button>${live?'':`<button id="dp-b10" aria-label="Back 10 seconds">${I.b10}</button>`}
    <button id="dp-pp" class="dp-pp" aria-label="Play">${I.play}</button>${live?'':`<button id="dp-f10" aria-label="Forward 10 seconds">${I.f10}</button>`}<button id="dp-next" aria-label="${live?'Next source':'Next'}">${I.next}</button></div>
   <div class="dp-src" role="tablist" aria-label="Source">${SRC.map(s=>`<button role="tab" data-s="${s.id}" aria-selected="${s===src}" class="${s===src?'on':''}" style="--hue:${s.hue}">${SI[s.id]}<b>${esc(s.name)}</b><span dir="rtl" lang="ar">${esc(s.ar)}</span></button>`).join('')}</div>
@@ -158,7 +188,7 @@ function build(){const live=isLive(),t=live?null:src.tracks[ti];
  $$('.dp-src button',pn).forEach(b=>b.onclick=()=>{A.haptic&&A.haptic();P.pick(b.dataset.s);});render();}
 let built='';function render(){const key=src.id+':'+ti;if(open&&built!==key){built=key;build();return;}
  const pp=$('#dp-pp',pn);if(pp){const playing=state==='playing'||state==='loading';pp.innerHTML=playing?I.pause:I.play;pp.setAttribute('aria-label',playing?'Pause':'Play');}
- pn.dataset.state=state;const st=$('#dp-st',pn);if(st)st.textContent=state==='loading'?'Connecting…':state==='error'?err:'';
+ pn.dataset.state=state;const st=$('#dp-st',pn);if(st)st.textContent=state==='loading'?(err||'Connecting…'):(state==='error'||state==='paused')?err:'';
  const isl=$('#island');if(isl){isl.classList.toggle('playing',state==='playing');isl.classList.toggle('media',state!=='idle'&&plrOn());}
  prog();A.islandTick&&A.islandTick();}
 function prog(){if(!open||isLive())return;const d=au.duration,c=au.currentTime;const sk=$('#dp-seek',pn);if(sk&&isFinite(d)&&d>0){sk.value=Math.round(c/d*1000);sk.style.setProperty('--p',(c/d*100).toFixed(1)+'%');

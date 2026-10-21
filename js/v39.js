@@ -2,6 +2,11 @@
     Copyright (c) 2026 Abdalla Abbadi. All rights reserved. a.abbadi@edcad.ae */
 (function(){'use strict';const A=window.AHV;if(!A)return;const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* 3.9.1: no pinch / double-tap zoom on iPhone (iOS ignores user-scalable=no since iOS 10, so the gestures are blocked here too).
+   touch-action:manipulation in CSS removes the double-tap-to-zoom delay without blocking fast repeated taps (the 5-tap island). */
+['gesturestart','gesturechange','gestureend'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
+document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1||(typeof e.scale==='number'&&e.scale!==1))e.preventDefault();},{passive:false});
+document.addEventListener('dblclick',e=>{if(!e.target.closest('input,textarea,[contenteditable]'))e.preventDefault();},{passive:false});
 const native=()=>!!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform());
 const EXTRA={
  faceid:{title:'Face ID / passkey',why:'Unlock the app with Face ID (or the device passcode) instead of the PIN. The biometric never leaves the device — the app only receives a yes/no from the system.',

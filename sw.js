@@ -1,5 +1,5 @@
 /* Al Hili Vitals 3.6 — Copyright (c) 2026 Abdalla Abbadi. All rights reserved. Offline cache (same-origin only). */
-const C='alhili-vitals-3.9.0';
+const C='alhili-vitals-3.9.1';
 const A=['./','index.html','styles.css','app.js','js/calc.js','js/shift.js','js/intro.js','js/faceid.js','js/home.js','js/roster.js','js/rostershot.js','js/reminders.js','js/calcui.js','js/ranges.js','js/parse.js','js/ocr.js','js/capture.js','js/onboard.js','js/batch.js','js/school.js','js/schools-data.js','js/docqr.js','js/schoolform.js','js/viewer.js','js/v36.js','js/v37.js','js/v38.js','js/v39.js','vendor/hls/hls.light.min.js','js/update.js','vendor/adhan/adhan.umd.min.js','vendor/html2canvas/html2canvas.min.js','viewer.html','vendor/qrcode/qrcode.js','img/seha-tile.png','img/schools/7155.png','img/schools/7173.png','img/schools/9131.png','img/schools/9141.png','img/schools/9153.png','img/schools/9155.png','img/schools/9157.png','img/schools/9162.png','img/schools/9173.png','img/schools/9203.png','img/schools/9246.png','img/schools/9303.png','js/changelog.js','fonts/dm-sans-latin-400-normal.woff2','fonts/dm-sans-latin-500-normal.woff2','fonts/dm-sans-latin-700-normal.woff2','fonts/dm-sans-latin-800-normal.woff2','manifest.webmanifest',
  'icons/logo-900.png','icons/logo-light-900.png','icons/icon.svg','icons/favicon-16.png','icons/favicon-32.png','favicon.ico','icons/maskable-512.png','icons/icon-180.png','icons/icon-192.png','icons/icon-512.png','img/hili-center.jpg','img/seha-uae.png','img/seha-clinics.png','img/seha-adhs.jpg',
  'vendor/xlsx/xlsx.full.min.js','vendor/pdfjs/pdf.min.js','vendor/pdfjs/pdf.worker.min.js'];
@@ -10,6 +10,8 @@ const lazy=()=>caches.open(C).then(c=>Promise.all(LAZY.map(u=>c.match(u).then(r=
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(A.map(u=>new Request(u,{cache:'reload'})))/* 3.6.3: bypass the HTTP cache so an update never stores old files */))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>self.clients.claim()).then(lazy))});
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==location.origin||u.pathname.endsWith('/version.json'))return;
+ /* never touch media or streams (range requests, HLS playlists/segments) — the browser fetches them directly */
+ if(e.request.destination==='audio'||e.request.destination==='video'||e.request.headers.has('range')||/\.(m3u8|aac|ts|m4s|mp3|mp4|m4a)$/i.test(u.pathname))return;
  e.respondWith(caches.match(e.request,{ignoreSearch:true}).then(r=>r||fetch(e.request).then(res=>{if(res.ok&&u.pathname.includes('/vendor/')){const cl=res.clone();caches.open(C).then(c=>c.put(e.request,cl));}return res;})))});
 self.addEventListener('message',e=>{if(e.data==='skip'){self.skipWaiting();return;}if(e.data==='prefetch')e.waitUntil(lazy());if(e.data==='skip')self.skipWaiting();});
 self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil(self.clients.matchAll({type:'window'}).then(cs=>cs.length?cs[0].focus():self.clients.openWindow('./')))});
